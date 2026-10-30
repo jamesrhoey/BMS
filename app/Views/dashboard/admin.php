@@ -134,7 +134,7 @@ $buildActivityPageUrl = static function (int $targetActPage): string {
                                 <div class="text-secondary mt-1" style="font-size: 0.74rem;">
                                     Actor: <strong><?= e($log['username'] ?? 'System') ?></strong>
                                     <?php if (!empty($log['ip_address'])): ?>
-                                        &bull; IP: <?= e($log['ip_address']) ?>
+                                        &bull; IP: <?= e(format_ip($log['ip_address'])) ?>
                                     <?php endif; ?>
                                 </div>
                             </div>

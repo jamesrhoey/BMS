@@ -206,4 +206,22 @@ if (!function_exists('render_table_footer')) {
     }
 }
 
+if (!function_exists('format_ip')) {
+    function format_ip(?string $ip): string
+    {
+        if ($ip === null || trim($ip) === '') {
+            return '—';
+        }
+        $trimmed = trim($ip);
+        if ($trimmed === '::1' || $trimmed === '0:0:0:0:0:0:0:1' || $trimmed === '::ffff:127.0.0.1' || $trimmed === '127.0.0.1') {
+            $localIp = @gethostbyname((string) @gethostname());
+            if (!empty($localIp) && filter_var($localIp, FILTER_VALIDATE_IP) !== false && $localIp !== '127.0.0.1') {
+                return $localIp;
+            }
+            return '127.0.0.1';
+        }
+        return $trimmed;
+    }
+}
+
 

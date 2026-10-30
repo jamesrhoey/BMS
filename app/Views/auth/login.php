@@ -2,7 +2,7 @@
     <div class="p-4 p-md-5 pb-4 text-center bms-auth-header">
         <img src="<?= asset('images/pagecom-logo.png') ?>" alt="PAGECOM INC." class="bms-auth-logo mb-3">
         <h1 class="h6 fw-bold mb-1 text-dark text-uppercase" style="letter-spacing: 0.06em;">Business Management System</h1>
-        <div class="text-secondary small">Integrated Enterprise Platform</div>
+        
     </div>
 
     <div class="p-4 p-md-5 pt-4">
@@ -58,9 +58,7 @@
             </div>
         </form>
 
-        <div class="mt-4 pt-3 border-top text-center text-secondary small">
-            Authorized personnel only &bull; Marketing &bull; PM &bull; Operations &bull; Logistics &bull; Finance
-        </div>
+       
     </div>
 </div>
 

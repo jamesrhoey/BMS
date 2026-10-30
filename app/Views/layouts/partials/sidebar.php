@@ -20,7 +20,6 @@ $userInitial = strtoupper((string) substr($userFullName !== '' ? $userFullName :
                 <polyline points="16 15 13 12 16 9"></polyline>
             </svg>
         </button>
-
         <button type="button"
                 class="bms-sidebar-header-btn bms-expand-only"
                 data-sidebar-expand
@@ -33,7 +32,6 @@ $userInitial = strtoupper((string) substr($userFullName !== '' ? $userFullName :
             </svg>
         </button>
     </div>
-
     <nav class="py-2 flex-grow-1">
         <div class="bms-sidebar-section"><span>Workspace</span></div>
 

@@ -137,10 +137,40 @@ final class Request
 
     public function ip(): ?string
     {
-        $remoteAddr = (string) ($this->server['REMOTE_ADDR'] ?? '');
-        if ($remoteAddr !== '' && filter_var($remoteAddr, FILTER_VALIDATE_IP) !== false) {
-            return $remoteAddr;
+        $headers = [
+            'HTTP_CF_CONNECTING_IP',
+            'HTTP_CLIENT_IP',
+            'HTTP_X_FORWARDED_FOR',
+            'HTTP_X_FORWARDED',
+            'HTTP_X_CLUSTER_CLIENT_IP',
+            'HTTP_FORWARDED_FOR',
+            'HTTP_FORWARDED',
+            'HTTP_X_REAL_IP',
+            'REMOTE_ADDR',
+        ];
+
+        foreach ($headers as $header) {
+            if (empty($this->server[$header])) {
+                continue;
+            }
+
+            $raw = (string) $this->server[$header];
+            $ips = explode(',', $raw);
+            foreach ($ips as $ipCandidate) {
+                $candidate = trim($ipCandidate);
+                if (filter_var($candidate, FILTER_VALIDATE_IP) !== false) {
+                    if ($candidate === '::1' || $candidate === '0:0:0:0:0:0:0:1' || $candidate === '::ffff:127.0.0.1' || $candidate === '127.0.0.1') {
+                        $localIp = @gethostbyname((string) @gethostname());
+                        if (!empty($localIp) && filter_var($localIp, FILTER_VALIDATE_IP) !== false && $localIp !== '127.0.0.1') {
+                            return $localIp;
+                        }
+                        return '127.0.0.1';
+                    }
+                    return $candidate;
+                }
+            }
         }
+
         return null;
     }
 

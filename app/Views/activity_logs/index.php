@@ -83,7 +83,7 @@ $buildLogPageUrl = static function (int $targetPage) use ($filters): string {
                                 <?php endif; ?>
                             </td>
                             <td class="small"><?= e($log['description']) ?></td>
-                            <td class="small font-monospace text-secondary"><?= e($log['ip_address'] ?? '—') ?></td>
+                            <td class="small font-monospace text-secondary"><?= e(format_ip($log['ip_address'] ?? null)) ?></td>
                         </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>
