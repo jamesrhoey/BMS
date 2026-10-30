@@ -1,0 +1,27 @@
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Deny access to hidden files and directories (.env, .git, etc.)
+    RewriteRule (^|/)\. - [F,L]
+
+    # Deny direct access to non-public application directories and sensitive root files
+    RewriteRule ^(app|config|database|routes|scripts|storage|tests)(/|$) - [F,L]
+    RewriteRule ^(README\.md|composer\.(json|lock)|phpunit\.xml)$ - [F,L]
+
+    # Forward all requests to the public/ directory
+    RewriteCond %{REQUEST_URI} !/public/
+    RewriteRule ^(.*)$ public/$1 [L,QSA]
+</IfModule>
+
+<FilesMatch "^(\.env.*|README\.md|.*\.sql)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+

@@ -1,0 +1,22 @@
+# Environment configuration (never commit real credentials)
+.env
+.env.*
+!.env.example
+
+# Uploaded documents and runtime logs
+/storage/documents/*
+!/storage/documents/.gitkeep
+/storage/logs/*
+!/storage/logs/.gitkeep
+
+# Dependencies & tooling
+/vendor/
+
+# IDE and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak
+
