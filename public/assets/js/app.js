@@ -183,5 +183,29 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         });
     }
+
+    // Bootstrap Toasts for system alerts (with offline fallback)
+    var toastElements = document.querySelectorAll('.bms-toast');
+    toastElements.forEach(function (toastEl) {
+        if (window.bootstrap && typeof window.bootstrap.Toast === 'function') {
+            var toastInstance = window.bootstrap.Toast.getOrCreateInstance(toastEl);
+            toastInstance.show();
+        } else {
+            var delay = parseInt(toastEl.getAttribute('data-bs-delay') || '5000', 10);
+            var closeBtns = toastEl.querySelectorAll('[data-bs-dismiss="toast"]');
+            closeBtns.forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    toastEl.classList.remove('show');
+                    toastEl.classList.add('hide');
+                });
+            });
+            if (toastEl.getAttribute('data-bs-autohide') !== 'false' && delay > 0) {
+                window.setTimeout(function () {
+                    toastEl.classList.remove('show');
+                    toastEl.classList.add('hide');
+                }, delay);
+            }
+        }
+    });
 });
 

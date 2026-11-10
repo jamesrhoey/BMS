@@ -108,6 +108,9 @@ final class MarketingChecklistService
 
         foreach ($allDocs as $doc) {
             $type = (string) $doc['document_type'];
+            if (in_array($type, ['PR Attachment', 'Actual BOM', 'Actual BOM Supporting Document'], true)) {
+                continue;
+            }
             if (!isset($definitions[$type])) {
                 if ((int) ($doc['is_current'] ?? 1) === 1) {
                     $supplementary[] = $doc;
@@ -181,8 +184,13 @@ final class MarketingChecklistService
         $verificationStatus = (string) ($project['verification_status'] ?? Project::VERIFICATION_NOT_SUBMITTED);
         $verificationLabel = match ($verificationStatus) {
             Project::VERIFICATION_PENDING_PM => 'Awaiting Project Management Document Verification',
+            Project::VERIFICATION_UNDER_REVIEW => 'Under Review by Project Management',
             Project::VERIFICATION_RETURNED => 'Returned by Project Management for Corrections',
-            Project::VERIFICATION_VERIFIED => 'Verified Complete by Project Management',
+            Project::VERIFICATION_VERIFIED, Project::VERIFICATION_APPROVED_PM => 'Approved by Project Management',
+            Project::VERIFICATION_FORWARDED_AFIN => 'Approved by PM & Forwarded to Admin Finance',
+            Project::VERIFICATION_UNDER_AFIN_REVIEW => 'Under Admin Finance Review',
+            Project::VERIFICATION_JOM_ISSUED => 'Verified & Official JOM Number Issued',
+            Project::VERIFICATION_FORWARDED_OPS => 'JOM, SLD & Marketing BOM Forwarded to Operations',
             default => 'Not Yet Submitted for PM Verification',
         };
 

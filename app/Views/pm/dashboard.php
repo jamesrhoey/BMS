@@ -18,54 +18,47 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
 };
 ?>
 
-<!-- 7 Database-Driven Project Management Summary Metric Cards -->
+<!-- 6 Database-Driven Project Management Summary Metric Cards -->
 <div class="row g-2 mb-4">
-    <div class="col-6 col-md-4 col-xl">
+    <div class="col-6 col-md-4 col-xl-2">
         <div class="bms-stat-card">
-            <div class="bms-stat-label">Total in Queue</div>
-            <div class="bms-stat-value"><?= (int) ($stats['total_pm_projects'] ?? 0) ?></div>
+            <div class="bms-stat-label">Pending Verification</div>
+            <div class="bms-stat-value text-primary"><?= (int) ($stats['pending_verification'] ?? $stats['awaiting_verification'] ?? 0) ?></div>
         </div>
     </div>
 
-    <div class="col-6 col-md-4 col-xl">
-        <div class="bms-stat-card">
-            <div class="bms-stat-label">Awaiting Verification</div>
-            <div class="bms-stat-value text-primary"><?= (int) ($stats['awaiting_verification'] ?? 0) ?></div>
-        </div>
-    </div>
-
-    <div class="col-6 col-md-4 col-xl">
+    <div class="col-6 col-md-4 col-xl-2">
         <div class="bms-stat-card">
             <div class="bms-stat-label">Under Review</div>
             <div class="bms-stat-value text-warning"><?= (int) ($stats['under_review'] ?? 0) ?></div>
         </div>
     </div>
 
-    <div class="col-6 col-md-4 col-xl">
+    <div class="col-6 col-md-4 col-xl-2">
         <div class="bms-stat-card">
-            <div class="bms-stat-label">Returned</div>
+            <div class="bms-stat-label">Returned to Marketing</div>
             <div class="bms-stat-value text-danger"><?= (int) ($stats['returned_to_marketing'] ?? 0) ?></div>
         </div>
     </div>
 
-    <div class="col-6 col-md-4 col-xl">
+    <div class="col-6 col-md-4 col-xl-2">
         <div class="bms-stat-card">
             <div class="bms-stat-label">Resubmitted</div>
-            <div class="bms-stat-value text-info"><?= (int) ($stats['resubmitted_for_verification'] ?? 0) ?></div>
+            <div class="bms-stat-value text-info"><?= (int) ($stats['resubmitted'] ?? $stats['resubmitted_for_verification'] ?? 0) ?></div>
         </div>
     </div>
 
-    <div class="col-6 col-md-4 col-xl">
+    <div class="col-6 col-md-4 col-xl-2">
         <div class="bms-stat-card">
-            <div class="bms-stat-label">Verified Completed</div>
-            <div class="bms-stat-value text-success"><?= (int) ($stats['verification_completed'] ?? 0) ?></div>
+            <div class="bms-stat-label">Approved</div>
+            <div class="bms-stat-value text-success"><?= (int) ($stats['approved'] ?? $stats['verification_completed'] ?? 0) ?></div>
         </div>
     </div>
 
-    <div class="col-6 col-md-4 col-xl">
+    <div class="col-6 col-md-4 col-xl-2">
         <div class="bms-stat-card">
-            <div class="bms-stat-label">JOM Issued</div>
-            <div class="bms-stat-value text-primary"><?= (int) ($stats['jom_issued'] ?? 0) ?></div>
+            <div class="bms-stat-label">Forwarded to Admin Finance</div>
+            <div class="bms-stat-value text-primary"><?= (int) ($stats['forwarded_to_admin_finance'] ?? 0) ?></div>
         </div>
     </div>
 </div>
@@ -77,12 +70,12 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
 
         <select id="status" name="status" class="form-select form-select-sm bms-toolbar-select" aria-label="Filter by verification status">
             <option value="">All Verification Statuses</option>
-            <option value="awaiting" <?= ($filters['status'] ?? '') === 'awaiting' ? 'selected' : '' ?>>Awaiting Verification</option>
+            <option value="pending" <?= in_array($filters['status'] ?? '', ['pending', 'awaiting'], true) ? 'selected' : '' ?>>Pending Verification</option>
             <option value="under_review" <?= ($filters['status'] ?? '') === 'under_review' ? 'selected' : '' ?>>Under Review</option>
-            <option value="resubmitted" <?= ($filters['status'] ?? '') === 'resubmitted' ? 'selected' : '' ?>>Resubmitted for Verification</option>
-            <option value="returned" <?= ($filters['status'] ?? '') === 'returned' ? 'selected' : '' ?>>Returned for Corrections</option>
-            <option value="completed" <?= in_array($filters['status'] ?? '', ['completed', 'verified'], true) ? 'selected' : '' ?>>Verification Completed</option>
-            <option value="jom_issued" <?= ($filters['status'] ?? '') === 'jom_issued' ? 'selected' : '' ?>>JOM Number Issued</option>
+            <option value="returned" <?= ($filters['status'] ?? '') === 'returned' ? 'selected' : '' ?>>Returned to Marketing</option>
+            <option value="resubmitted" <?= ($filters['status'] ?? '') === 'resubmitted' ? 'selected' : '' ?>>Resubmitted</option>
+            <option value="approved" <?= in_array($filters['status'] ?? '', ['approved', 'completed', 'verified'], true) ? 'selected' : '' ?>>Approved by Project Management</option>
+            <option value="forwarded_to_admin_finance" <?= in_array($filters['status'] ?? '', ['forwarded_to_admin_finance', 'forwarded'], true) ? 'selected' : '' ?>>Forwarded to Admin Finance</option>
         </select>
 
         <select id="sort" name="sort" class="form-select form-select-sm bms-toolbar-select" aria-label="Sort by date">
@@ -136,9 +129,10 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
                         <?php
                         $pId = (int) $proj['id'];
                         $pStatus = (string) ($proj['status'] ?? '');
-                        $canStartReview = in_array($pStatus, ['Submitted for Document Verification', 'Resubmitted for Verification', 'Submitted'], true);
+                        $canStartReview = in_array($pStatus, ['Submitted for Document Verification', 'Submitted for Verification', 'Resubmitted for Verification', 'Submitted'], true);
                         $isUnderReview = $pStatus === 'Under Review';
-                        $isVerified = $pStatus === 'Document Verification Completed';
+                        $isApproved = in_array($pStatus, ['Approved by Project Management', 'Document Verification Completed'], true);
+                        $isForwarded = $pStatus === 'Forwarded to Admin Finance' || !empty($proj['forwarded_to_afin_at']);
                         ?>
                         <tr>
                             <td>
@@ -189,7 +183,19 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
                                         </form>
                                     <?php endif; ?>
 
-                                    <?php if ($pStatus !== 'Returned for Corrections' && !$isVerified): ?>
+                                    <?php if ($isApproved && !$isForwarded): ?>
+                                        <form method="POST" action="<?= url('/projects/' . $pId . '/forward-to-admin-finance') ?>" class="m-0 d-inline" data-confirm="Forward approved project '<?= e($proj['project_code']) ?>' to Admin Finance?">
+                                            <?= csrf_field() ?>
+                                            <button type="submit"
+                                                    class="bms-action-icon bms-action-icon--success"
+                                                    title="Forward to Admin Finance"
+                                                    aria-label="Forward to Admin Finance">
+                                                <?= bms_icon('send') ?>
+                                            </button>
+                                        </form>
+                                    <?php endif; ?>
+
+                                    <?php if (!in_array($pStatus, ['Returned for Corrections', 'Returned to Marketing for Corrections'], true) && !$isApproved && !$isForwarded): ?>
                                         <a href="<?= url('/projects/' . $pId . '#pm-review-panel') ?>"
                                            class="bms-action-icon bms-action-icon--danger"
                                            title="Return for Corrections"

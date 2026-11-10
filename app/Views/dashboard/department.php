@@ -5,11 +5,11 @@ $deptDesc = $department['description'] ?? 'Your account is not currently linked 
 
 $plannedCapabilities = match ($deptCode) {
     'MKT' => 'Client document completeness checklist, quotation/proposal tracking, and handoff to Project Management.',
-    'PM' => 'JOM number issuance, project execution planning, milestone tracking, and cross-department handoffs.',
-    'OPS' => 'Field service work orders, technical execution updates, and operational deliverables.',
+    'PM' => 'Marketing document completeness verification, correction returns, approval decisions, and forwarding approved projects to Admin Finance.',
+    'OPS' => 'Incoming Operations project queue (JOM Number, SLD, and Marketing BOM forwarded by Admin Finance), field service work orders, and technical execution.',
     'LOG' => 'Material requisition fulfillment, supplier purchasing coordination, warehouse inventory, and dispatch.',
     'OPFIN' => 'Operational budget control, project expense requests, liquidations, and operational disbursements.',
-    'ADMFIN' => 'Progress billing, client invoicing, collections monitoring, and project financial close-out.',
+    'ADMFIN' => 'Incoming verified project queue from Project Management, official JOM number issuance, and forwarding of JOM Number, SLD, and Marketing BOM to Operations.',
     default => 'Department-specific operational workflows scheduled for upcoming modules.',
 };
 ?>
@@ -113,7 +113,7 @@ $plannedCapabilities = match ($deptCode) {
             <div>
                 <h3 class="h6 fw-bold mb-0">Marketing Document Verification Queue (<?= $pmQueueCount ?>)</h3>
                 <div class="text-secondary small">
-                    Projects submitted by Marketing awaiting document completeness verification before JOM number issuance.
+                    Projects submitted by Marketing awaiting document completeness verification before forwarding to Admin Finance.
                 </div>
             </div>
             <a href="<?= url('/projects?status=pm_queue') ?>" class="btn btn-light btn-sm border text-secondary">Filter Queue &rarr;</a>
@@ -166,6 +166,166 @@ $plannedCapabilities = match ($deptCode) {
             </table>
         </div>
         <?= render_table_footer(1, max(1, $pmQueueCount), $pmQueueCount, $pmQueueCount) ?>
+    </div>
+<?php endif; ?>
+
+<?php if (!empty($isAdminFinanceUser)): ?>
+    <?php $afinQueueCount = count($adminFinanceQueue ?? []); ?>
+    <!-- Admin Finance Incoming Project Queue (Projects Forwarded by Project Management) -->
+    <div class="bms-table-panel mb-4 border-start border-4 border-primary">
+        <div class="bms-table-toolbar bms-table-toolbar--split">
+            <div>
+                <h3 class="h6 fw-bold mb-0">Admin Finance Incoming Project Queue (<?= $afinQueueCount ?>)</h3>
+                <div class="text-secondary small">
+                    Projects verified and forwarded by Project Management awaiting Admin Finance JOM number issuance and financial processing.
+                </div>
+            </div>
+            <a href="<?= url('/projects') ?>" class="btn btn-light btn-sm border text-secondary">View All &rarr;</a>
+        </div>
+        <div class="table-responsive">
+            <table class="table mb-0">
+                <thead>
+                    <tr>
+                        <th>Project Code / JOM</th>
+                        <th>Project Name</th>
+                        <th>Client</th>
+                        <th>Forwarded By (PM)</th>
+                        <th>Forwarded At &darr;</th>
+                        <th>Workflow Status</th>
+                        <th class="text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (($adminFinanceQueue ?? []) === []): ?>
+                        <tr>
+                            <td colspan="7" class="text-center text-secondary py-4 small">
+                                No projects have been forwarded to Admin Finance yet.
+                            </td>
+                        </tr>
+                    <?php else: ?>
+                        <?php foreach ($adminFinanceQueue as $afProj): ?>
+                            <tr>
+                                <td class="font-monospace small fw-semibold">
+                                    <?= e($afProj['project_code']) ?>
+                                    <?php if (!empty($afProj['jom_number'])): ?>
+                                        <div><span class="badge bg-primary font-monospace" style="font-size: 0.72rem;"><?= e($afProj['jom_number']) ?></span></div>
+                                    <?php endif; ?>
+                                </td>
+                                <td class="fw-medium"><?= e($afProj['project_name']) ?></td>
+                                <td><?= e($afProj['client_name']) ?></td>
+                                <td class="small"><?= e($afProj['forwarded_to_afin_by_name'] ?? $afProj['verifier_name'] ?? 'Project Management') ?></td>
+                                <td class="small text-secondary"><?= format_datetime($afProj['forwarded_to_afin_at'] ?? $afProj['verified_at'] ?? $afProj['updated_at']) ?></td>
+                                <td>
+                                    <span class="badge <?= project_status_badge_class((string) $afProj['status']) ?>"><?= e($afProj['status']) ?></span>
+                                </td>
+                                <td class="text-end">
+                                    <div class="bms-action-group">
+                                        <a href="<?= url('/projects/' . (int) $afProj['id']) ?>"
+                                           class="bms-action-icon bms-action-icon--primary"
+                                           title="Open Forwarded Project"
+                                           aria-label="Open Forwarded Project">
+                                            <?= bms_icon('eye') ?>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+        <?= render_table_footer(1, max(1, $afinQueueCount), $afinQueueCount, $afinQueueCount) ?>
+    </div>
+<?php endif; ?>
+
+<?php if (!empty($isOperationsUser)): ?>
+    <?php $opsQueueCount = count($operationsQueue ?? []); ?>
+    <!-- Operations Incoming Project Queue (JOM Number, SLD & Marketing BOM Forwarded by Admin Finance) -->
+    <div class="bms-table-panel mb-4 border-start border-4 border-info">
+        <div class="bms-table-toolbar bms-table-toolbar--split">
+            <div>
+                <h3 class="h6 fw-bold mb-0">Operations Incoming Project Queue (<?= $opsQueueCount ?>)</h3>
+                <div class="text-secondary small">
+                    Projects with official JOM Number, Single Line Diagram (SLD), and Marketing BOM forwarded by Admin Finance.
+                </div>
+            </div>
+            <a href="<?= url('/projects') ?>" class="btn btn-light btn-sm border text-secondary">View All &rarr;</a>
+        </div>
+        <div class="table-responsive">
+            <table class="table mb-0">
+                <thead>
+                    <tr>
+                        <th>JOM Number</th>
+                        <th>Project Identifier &amp; Name</th>
+                        <th>Client</th>
+                        <th>Forwarded Handoff Documents</th>
+                        <th>Forwarded By (Admin Finance)</th>
+                        <th>Forwarded At &darr;</th>
+                        <th class="text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (($operationsQueue ?? []) === []): ?>
+                        <tr>
+                            <td colspan="7" class="text-center text-secondary py-4 small">
+                                No projects have been forwarded from Admin Finance to Operations yet.
+                            </td>
+                        </tr>
+                    <?php else: ?>
+                        <?php foreach ($operationsQueue as $opsProj): ?>
+                            <?php
+                            $opsProjId = (int) $opsProj['id'];
+                            $sldDocId = !empty($opsProj['ops_sld_document_id']) ? (int) $opsProj['ops_sld_document_id'] : null;
+                            $bomDocId = !empty($opsProj['ops_bom_document_id']) ? (int) $opsProj['ops_bom_document_id'] : null;
+                            ?>
+                            <tr>
+                                <td>
+                                    <span class="badge bg-primary font-monospace"><?= e($opsProj['jom_number'] ?? 'N/A') ?></span>
+                                </td>
+                                <td>
+                                    <a href="<?= url('/projects/' . $opsProjId) ?>" class="fw-semibold text-dark text-decoration-none">
+                                        <?= e($opsProj['project_name']) ?>
+                                    </a>
+                                    <div class="font-monospace small text-secondary"><?= e($opsProj['project_code']) ?></div>
+                                </td>
+                                <td><?= e($opsProj['client_name']) ?></td>
+                                <td class="small">
+                                    <div class="d-flex flex-wrap gap-1">
+                                        <?php if ($sldDocId !== null): ?>
+                                            <a href="<?= url('/projects/' . $opsProjId . '/documents/' . $sldDocId . '/download') ?>"
+                                               class="badge badge-soft-primary text-decoration-none"
+                                               title="Download Single Line Diagram (SLD)">
+                                                SLD &darr;
+                                            </a>
+                                        <?php endif; ?>
+                                        <?php if ($bomDocId !== null): ?>
+                                            <a href="<?= url('/projects/' . $opsProjId . '/documents/' . $bomDocId . '/download') ?>"
+                                               class="badge badge-soft-success text-decoration-none"
+                                               title="Download Marketing BOM (Bill of Materials)">
+                                                Marketing BOM &darr;
+                                            </a>
+                                        <?php endif; ?>
+                                    </div>
+                                </td>
+                                <td class="small"><?= e($opsProj['forwarded_to_ops_by_name'] ?? 'Admin Finance') ?></td>
+                                <td class="small text-secondary"><?= format_datetime($opsProj['forwarded_to_ops_at'] ?? $opsProj['updated_at']) ?></td>
+                                <td class="text-end">
+                                    <div class="bms-action-group">
+                                        <a href="<?= url('/projects/' . $opsProjId) ?>"
+                                           class="bms-action-icon bms-action-icon--primary"
+                                           title="Open Operations Project & Handoff Documents"
+                                           aria-label="Open Operations Project & Handoff Documents">
+                                            <?= bms_icon('eye') ?>
+                                        </a>
+                                    </div>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+        <?= render_table_footer(1, max(1, $opsQueueCount), $opsQueueCount, $opsQueueCount) ?>
     </div>
 <?php endif; ?>
 

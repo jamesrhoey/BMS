@@ -71,6 +71,51 @@ final class ProjectDocument
         return $row !== false ? $row : null;
     }
 
+    /**
+     * Find the active current document of a specific type for a project (e.g. 'SLD', 'BOM').
+     *
+     * @return array<string, mixed>|null
+     */
+    public static function findCurrentByType(int $projectId, string $documentType): ?array
+    {
+        $stmt = Database::connection()->prepare(
+            self::BASE_SELECT . ' WHERE pd.project_id = :project_id AND pd.document_type = :doc_type AND pd.is_current = 1 ORDER BY pd.version_number DESC, pd.id DESC LIMIT 1'
+        );
+        $stmt->execute([
+            'project_id' => $projectId,
+            'doc_type' => $documentType,
+        ]);
+        $row = $stmt->fetch();
+        return $row !== false ? $row : null;
+    }
+
+    /**
+     * Retrieve the required Operations handoff documents (SLD and Marketing BOM) for a project.
+     * Note: 'BOM' in `project_documents` is the Marketing BOM (distinct from Actual BOM).
+     *
+     * @return array{sld: array<string, mixed>|null, marketing_bom: array<string, mixed>|null, is_ready: bool, missing: list<string>}
+     */
+    public static function operationsHandoffDocuments(int $projectId): array
+    {
+        $sld = self::findCurrentByType($projectId, 'SLD');
+        $marketingBom = self::findCurrentByType($projectId, 'BOM');
+
+        $missing = [];
+        if ($sld === null) {
+            $missing[] = 'SLD (Single Line Diagram)';
+        }
+        if ($marketingBom === null) {
+            $missing[] = 'Marketing BOM (Bill of Materials)';
+        }
+
+        return [
+            'sld' => $sld,
+            'marketing_bom' => $marketingBom,
+            'is_ready' => $sld !== null && $marketingBom !== null,
+            'missing' => $missing,
+        ];
+    }
+
     public static function nextVersionNumber(int $projectId, string $documentType): int
     {
         $stmt = Database::connection()->prepare(

@@ -32,6 +32,21 @@ final class DashboardController extends Controller
             return;
         }
 
+        if (AuthorizationService::isAdminFinanceUser($user)) {
+            (new AdminFinanceController())->dashboard($request);
+            return;
+        }
+
+        if (AuthorizationService::isOperationsUser($user)) {
+            (new OperationsController())->dashboard($request);
+            return;
+        }
+
+        if (AuthorizationService::isOpsFinanceUser($user)) {
+            (new OpsFinanceController())->dashboard($request);
+            return;
+        }
+
         $this->departmentDashboard($request);
     }
 
@@ -90,6 +105,16 @@ final class DashboardController extends Controller
             $pmQueue = Project::pmVerificationQueue((int) $department['id'], 10);
         }
 
+        $adminFinanceQueue = [];
+        if (AuthorizationService::isAdminFinanceUser($user) && $department !== null) {
+            $adminFinanceQueue = Project::adminFinanceIncomingQueue((int) $department['id'], 10);
+        }
+
+        $operationsQueue = [];
+        if (AuthorizationService::isOperationsUser($user) && $department !== null) {
+            $operationsQueue = Project::operationsIncomingQueue((int) $department['id'], 10);
+        }
+
         $this->render('dashboard/department', [
             'pageTitle' => ($department['department_name'] ?? 'Department') . ' Workspace',
             'activeNav' => 'dashboard_dept',
@@ -97,6 +122,8 @@ final class DashboardController extends Controller
             'projectCounts' => $projectCounts,
             'recentProjects' => $recentProjects,
             'pmVerificationQueue' => $pmQueue,
+            'adminFinanceQueue' => $adminFinanceQueue,
+            'operationsQueue' => $operationsQueue,
         ]);
     }
 }

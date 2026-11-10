@@ -112,6 +112,84 @@ $userInitial = strtoupper((string) substr($userFullName !== '' ? $userFullName :
                 </span>
                 <span class="bms-nav-label">Projects</span>
             </a>
+        <?php elseif (!empty($isAdminFinanceUser)): ?>
+            <a href="<?= url('/admin-finance/dashboard') ?>"
+               class="bms-nav-link <?= in_array(($activeNav ?? ''), ['afin_dashboard', 'dashboard', 'dashboard_dept'], true) ? 'active' : '' ?>"
+               title="Dashboard">
+                <span class="bms-nav-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+                        <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+                        <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+                        <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+                    </svg>
+                </span>
+                <span class="bms-nav-label">Dashboard</span>
+            </a>
+
+            <a href="<?= url('/admin-finance/projects') ?>"
+               class="bms-nav-link <?= in_array(($activeNav ?? ''), ['afin_projects', 'projects'], true) ? 'active' : '' ?>"
+               title="Projects">
+                <span class="bms-nav-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 11l3 3L22 4"></path>
+                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                    </svg>
+                </span>
+                <span class="bms-nav-label">Projects</span>
+            </a>
+        <?php elseif (!empty($isOperationsUser)): ?>
+            <a href="<?= url('/operations/dashboard') ?>"
+               class="bms-nav-link <?= in_array(($activeNav ?? ''), ['ops_dashboard', 'dashboard', 'dashboard_dept'], true) ? 'active' : '' ?>"
+               title="Dashboard">
+                <span class="bms-nav-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+                        <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+                        <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+                        <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+                    </svg>
+                </span>
+                <span class="bms-nav-label">Dashboard</span>
+            </a>
+
+            <a href="<?= url('/operations/projects') ?>"
+               class="bms-nav-link <?= in_array(($activeNav ?? ''), ['ops_projects', 'projects'], true) ? 'active' : '' ?>"
+               title="Projects & Purchase Requests">
+                <span class="bms-nav-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 11l3 3L22 4"></path>
+                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                    </svg>
+                </span>
+                <span class="bms-nav-label">Projects &amp; PRs</span>
+            </a>
+        <?php elseif (!empty($isOpsFinanceUser)): ?>
+            <a href="<?= url('/ops-finance/dashboard') ?>"
+               class="bms-nav-link <?= in_array(($activeNav ?? ''), ['opfin_dashboard', 'dashboard', 'dashboard_dept'], true) ? 'active' : '' ?>"
+               title="Dashboard">
+                <span class="bms-nav-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+                        <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+                        <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+                        <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+                    </svg>
+                </span>
+                <span class="bms-nav-label">Dashboard</span>
+            </a>
+
+            <a href="<?= url('/ops-finance/projects') ?>"
+               class="bms-nav-link <?= in_array(($activeNav ?? ''), ['opfin_projects', 'projects'], true) ? 'active' : '' ?>"
+               title="Purchase Requests & Actual BOM">
+                <span class="bms-nav-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 11l3 3L22 4"></path>
+                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                    </svg>
+                </span>
+                <span class="bms-nav-label">PRs &amp; Actual BOM</span>
+            </a>
         <?php else: ?>
             <a href="<?= url('/dashboard') ?>"
                class="bms-nav-link <?= ($activeNav ?? '') === 'dashboard_dept' ? 'active' : '' ?>"
@@ -203,6 +281,43 @@ $userInitial = strtoupper((string) substr($userFullName !== '' ? $userFullName :
                     </svg>
                 </span>
                 <span class="bms-nav-label">Projects</span>
+            </a>
+
+            <div class="bms-sidebar-section"><span>Admin Finance / Ops / OPS Fin</span></div>
+
+            <a href="<?= url('/admin-finance/dashboard') ?>"
+               class="bms-nav-link <?= ($activeNav ?? '') === 'afin_dashboard' ? 'active' : '' ?>"
+               title="Admin Finance — JOM & Actual BOM">
+                <span class="bms-nav-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                    </svg>
+                </span>
+                <span class="bms-nav-label">Admin Finance</span>
+            </a>
+
+            <a href="<?= url('/operations/dashboard') ?>"
+               class="bms-nav-link <?= ($activeNav ?? '') === 'ops_dashboard' ? 'active' : '' ?>"
+               title="Operations — Purchase Requests">
+                <span class="bms-nav-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 11l3 3L22 4"></path>
+                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                    </svg>
+                </span>
+                <span class="bms-nav-label">Operations PRs</span>
+            </a>
+
+            <a href="<?= url('/ops-finance/dashboard') ?>"
+               class="bms-nav-link <?= ($activeNav ?? '') === 'opfin_dashboard' ? 'active' : '' ?>"
+               title="OPS Finance — Actual BOM">
+                <span class="bms-nav-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M9 11l3 3L22 4"></path>
+                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+                    </svg>
+                </span>
+                <span class="bms-nav-label">OPS Finance BOM</span>
             </a>
 
             <div class="bms-sidebar-section"><span>Administration</span></div>

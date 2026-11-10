@@ -171,9 +171,9 @@
 </div>
 
 <?php if ($fileCategory === 'excel'): ?>
-    <script src="<?= asset('js/vendor/xlsx.full.min.js') ?>"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <?php elseif ($fileCategory === 'word'): ?>
-    <script src="<?= asset('js/vendor/mammoth.browser.min.js') ?>"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
 <?php endif; ?>
 <script src="<?= asset('js/document-viewer.js') ?>"></script>
 

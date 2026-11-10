@@ -24,6 +24,46 @@ final class DocumentStorageService
         'svg', 'html', 'htm', 'xhtml', 'scr', 'reg',
     ];
 
+    private const WORKFLOW_DOCUMENT_TYPES = [
+        'PR Attachment',
+        'Actual BOM',
+        'Actual BOM Supporting Document',
+    ];
+
+    /**
+     * Validate and store a workflow document (PR Attachment, Actual BOM, or Actual BOM Supporting Document)
+     * in project_documents while preserving all previous versions. Never overwrites Marketing BOM ('BOM').
+     *
+     * @param array<string, mixed> $project
+     * @param array<string, mixed>|null $file
+     * @param array<string, mixed> $actor
+     * @return array{success: bool, error?: string, document_id?: int, version_number?: int, replaced?: bool}
+     */
+    public static function storeWorkflowDocument(
+        array $project,
+        ?array $file,
+        string $documentType,
+        array $actor,
+        Request $request,
+        string $uploadNotes = '',
+        bool $allowLocalTestFile = false
+    ): array {
+        $documentType = trim($documentType);
+        if (!in_array($documentType, self::WORKFLOW_DOCUMENT_TYPES, true)) {
+            return ['success' => false, 'error' => 'Invalid workflow document category.'];
+        }
+
+        return self::storeUploadedDocument(
+            $project,
+            $file,
+            $documentType,
+            $actor,
+            $request,
+            $uploadNotes,
+            $allowLocalTestFile
+        );
+    }
+
     /**
      * Validate and store an uploaded or replacement project document outside the web root.
      * Preserves all previous versions in `project_documents` and `storage/documents` for auditability.
@@ -45,10 +85,11 @@ final class DocumentStorageService
         $allowedCategories = (array) Config::get('app.uploads.document_categories', []);
         $checklistTypes = MarketingChecklistService::allChecklistTypes((string) ($project['workflow_type'] ?? 'standard'));
         $documentType = trim($documentType);
+        $isWorkflowDoc = in_array($documentType, self::WORKFLOW_DOCUMENT_TYPES, true);
 
         if (
             $documentType === ''
-            || (!array_key_exists($documentType, $allowedCategories) && !in_array($documentType, $checklistTypes, true))
+            || (!array_key_exists($documentType, $allowedCategories) && !in_array($documentType, $checklistTypes, true) && !$isWorkflowDoc)
         ) {
             return ['success' => false, 'error' => 'Please select a valid Marketing checklist document type.'];
         }
@@ -164,6 +205,7 @@ final class DocumentStorageService
 
         $actorId = (int) $actor['id'];
         $isChecklistDoc = in_array($documentType, $checklistTypes, true);
+        $isVersionedDoc = $isChecklistDoc || $isWorkflowDoc;
 
         try {
             $outcome = Database::transaction(static function () use (
@@ -171,6 +213,7 @@ final class DocumentStorageService
                 $project,
                 $documentType,
                 $isChecklistDoc,
+                $isVersionedDoc,
                 $sanitizedDisplayName,
                 $storedFilename,
                 $relativePath,
@@ -183,7 +226,7 @@ final class DocumentStorageService
                 $version = ProjectDocument::nextVersionNumber($projectId, $documentType);
                 $supersededCount = 0;
 
-                if ($isChecklistDoc && $version > 1) {
+                if ($isVersionedDoc && $version > 1) {
                     $supersededCount = ProjectDocument::markPreviousVersionsNotCurrent($projectId, $documentType);
                 }
 

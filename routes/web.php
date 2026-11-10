@@ -3,11 +3,14 @@
 declare(strict_types=1);
 
 use App\Controllers\ActivityLogController;
+use App\Controllers\AdminFinanceController;
 use App\Controllers\AuthController;
 use App\Controllers\DashboardController;
 use App\Controllers\DepartmentController;
 use App\Controllers\MarketingController;
 use App\Controllers\NotificationController;
+use App\Controllers\OperationsController;
+use App\Controllers\OpsFinanceController;
 use App\Controllers\ProfileController;
 use App\Controllers\ProjectController;
 use App\Controllers\ProjectDocumentController;
@@ -54,6 +57,18 @@ $router->post('/marketing/projects', [MarketingController::class, 'storeProject'
 $router->get('/pm/dashboard', [ProjectManagementController::class, 'dashboard'], [AuthMiddleware::class]);
 $router->get('/pm/projects', [ProjectManagementController::class, 'projects'], [AuthMiddleware::class]);
 
+// Admin Finance Department Module Routes
+$router->get('/admin-finance/dashboard', [AdminFinanceController::class, 'dashboard'], [AuthMiddleware::class]);
+$router->get('/admin-finance/projects', [AdminFinanceController::class, 'projects'], [AuthMiddleware::class]);
+
+// Operations Department Module Routes
+$router->get('/operations/dashboard', [OperationsController::class, 'dashboard'], [AuthMiddleware::class]);
+$router->get('/operations/projects', [OperationsController::class, 'projects'], [AuthMiddleware::class]);
+
+// OPS Finance Department Module Routes
+$router->get('/ops-finance/dashboard', [OpsFinanceController::class, 'dashboard'], [AuthMiddleware::class]);
+$router->get('/ops-finance/projects', [OpsFinanceController::class, 'projects'], [AuthMiddleware::class]);
+
 // Administrator-Only User Management Routes
 $adminMiddleware = [
     AuthMiddleware::class,
@@ -85,8 +100,30 @@ $router->post('/projects/{id}/prepare-documents', [ProjectController::class, 'st
 $router->post('/projects/{id}/submit', [ProjectController::class, 'submit'], [AuthMiddleware::class]);
 $router->post('/projects/{id}/start-review', [ProjectManagementController::class, 'startReview'], [AuthMiddleware::class]);
 $router->post('/projects/{id}/complete-verification', [ProjectManagementController::class, 'completeVerification'], [AuthMiddleware::class]);
-$router->post('/projects/{id}/issue-jom', [ProjectManagementController::class, 'issueJomNumber'], [AuthMiddleware::class]);
+$router->post('/projects/{id}/forward-to-admin-finance', [ProjectManagementController::class, 'forwardToAdminFinance'], [AuthMiddleware::class]);
+$router->post('/projects/{id}/admin-finance-review', [AdminFinanceController::class, 'startReview'], [AuthMiddleware::class]);
+$router->post('/projects/{id}/issue-jom', [AdminFinanceController::class, 'issueJomNumber'], [AuthMiddleware::class]);
+$router->post('/projects/{id}/forward-to-operations', [AdminFinanceController::class, 'forwardToOperations'], [AuthMiddleware::class]);
 $router->post('/projects/{id}/return-to-marketing', [ProjectController::class, 'returnToMarketing'], [AuthMiddleware::class]);
+
+// Operations Purchase Request (PR) & OPS Finance Actual BOM Handoff Routes
+$router->post('/projects/{id}/purchase-request', [OperationsController::class, 'savePurchaseRequest'], [AuthMiddleware::class]);
+$router->post('/projects/{id}/purchase-request/submit', [OperationsController::class, 'submitPurchaseRequest'], [AuthMiddleware::class]);
+$router->post('/projects/{id}/purchase-request/review', [OpsFinanceController::class, 'reviewPurchaseRequest'], [AuthMiddleware::class]);
+$router->post('/projects/{id}/purchase-request/return', [OpsFinanceController::class, 'returnPurchaseRequest'], [AuthMiddleware::class]);
+$router->post('/projects/{id}/purchase-request/approve', [OpsFinanceController::class, 'approvePurchaseRequest'], [AuthMiddleware::class]);
+$router->post('/projects/{id}/purchase-request/reject', [OpsFinanceController::class, 'rejectPurchaseRequest'], [AuthMiddleware::class]);
+$router->post('/projects/{id}/actual-bom', [OpsFinanceController::class, 'saveActualBom'], [AuthMiddleware::class]);
+$router->post('/projects/{id}/actual-bom/submit', [OpsFinanceController::class, 'submitActualBom'], [AuthMiddleware::class]);
+$router->post('/projects/{id}/actual-bom/review', [AdminFinanceController::class, 'reviewActualBom'], [AuthMiddleware::class]);
+
+// Phase 3: Purchase Order (PO), Payment Terms, Supplier Delivery & Stock In Routes
+$router->post('/projects/{id}/purchase-orders', [AdminFinanceController::class, 'createPurchaseOrder'], [AuthMiddleware::class]);
+$router->post('/projects/{id}/purchase-orders/{poId}/authorize', [AdminFinanceController::class, 'authorizePurchaseOrder'], [AuthMiddleware::class]);
+$router->post('/projects/{id}/purchase-orders/{poId}/issue', [AdminFinanceController::class, 'issuePurchaseOrder'], [AuthMiddleware::class]);
+$router->post('/projects/{id}/purchase-orders/{poId}/payment-terms', [AdminFinanceController::class, 'addPaymentTerm'], [AuthMiddleware::class]);
+$router->post('/projects/{id}/purchase-orders/{poId}/deliveries', [OperationsController::class, 'recordDelivery'], [AuthMiddleware::class]);
+$router->post('/projects/{id}/deliveries/{deliveryId}/stock-in', [OperationsController::class, 'executeStockIn'], [AuthMiddleware::class]);
 
 // Project Document Upload, Replacement, Authorized View & Download Routes
 $router->post('/projects/{id}/documents', [ProjectDocumentController::class, 'upload'], [AuthMiddleware::class]);

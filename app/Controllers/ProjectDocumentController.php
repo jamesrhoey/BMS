@@ -88,6 +88,13 @@ final class ProjectDocumentController extends Controller
             $this->notFound('The requested project document could not be found.');
         }
 
+        if (!AuthorizationService::canDownloadDocument($user, $project, $document)) {
+            $this->denyAccess(
+                $request,
+                "User '{$user['username']}' attempted to download document '{$document['document_type']}' from project '{$project['project_code']}' without authorization."
+            );
+        }
+
         $verifiedPath = DocumentStorageService::resolveVerifiedPath($document);
         if ($verifiedPath === null) {
             $this->notFound('The stored document file is unavailable on disk.');
@@ -133,6 +140,13 @@ final class ProjectDocumentController extends Controller
             $this->notFound('The requested project document could not be found.');
         }
 
+        if (!AuthorizationService::canDownloadDocument($user, $project, $document)) {
+            $this->denyAccess(
+                $request,
+                "User '{$user['username']}' attempted to access document '{$document['document_type']}' from project '{$project['project_code']}' without authorization."
+            );
+        }
+
         $verifiedPath = DocumentStorageService::resolveVerifiedPath($document);
         if ($verifiedPath === null) {
             $this->notFound('The stored document file is unavailable on disk.');
@@ -170,6 +184,13 @@ final class ProjectDocumentController extends Controller
 
         if ($document === null || (int) $document['project_id'] !== (int) $project['id']) {
             $this->notFound('The requested project document could not be found.');
+        }
+
+        if (!AuthorizationService::canDownloadDocument($user, $project, $document)) {
+            $this->denyAccess(
+                $request,
+                "User '{$user['username']}' attempted to view document '{$document['document_type']}' from project '{$project['project_code']}' without authorization."
+            );
         }
 
         $verifiedPath = DocumentStorageService::resolveVerifiedPath($document);

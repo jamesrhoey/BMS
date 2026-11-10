@@ -9,9 +9,16 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Core\Session;
 use App\Models\ActivityLog;
+use App\Models\ActualBom;
 use App\Models\Department;
+use App\Models\Inventory;
 use App\Models\Project;
+use App\Models\ProjectDocument;
 use App\Models\ProjectWorkflowHistory;
+use App\Models\PurchaseOrder;
+use App\Models\PurchaseRequest;
+use App\Models\Supplier;
+use App\Models\SupplierDelivery;
 use App\Services\AuthorizationService;
 use App\Services\MarketingChecklistService;
 use App\Services\ProjectService;
@@ -113,17 +120,50 @@ final class ProjectController extends Controller
             );
         }
 
+        $projectId = (int) $project['id'];
         $checklist = MarketingChecklistService::evaluateProject($project);
-        $workflowHistories = ProjectWorkflowHistory::forProject((int) $project['id']);
-        $projectLogs = ActivityLog::forEntity('project', (int) $project['id'], 20);
+        $workflowHistories = ProjectWorkflowHistory::forProject($projectId);
+        $projectLogs = ActivityLog::forEntity('project', $projectId, 20);
+        $purchaseRequest = PurchaseRequest::findByProjectId($projectId);
+        $actualBom = ActualBom::findByProjectId($projectId);
+        $purchaseOrders = PurchaseOrder::forProject($projectId);
+        $supplierDeliveries = SupplierDelivery::forProject($projectId);
+        $inventoryUnits = Inventory::unitsForProject($projectId);
+        $inventoryTransactions = Inventory::transactionsForProject($projectId);
+        $suppliers = Supplier::allActive();
+
+        $activePo = $purchaseOrders[0] ?? null;
+        $activeDelivery = $supplierDeliveries[0] ?? null;
+
+        $activeNav = 'projects';
+        if (AuthorizationService::isMarketingUser($user)) {
+            $activeNav = 'marketing_projects';
+        } elseif (AuthorizationService::isProjectManagementUser($user)) {
+            $activeNav = 'pm_projects';
+        } elseif (AuthorizationService::isAdminFinanceUser($user)) {
+            $activeNav = 'afin_projects';
+        } elseif (AuthorizationService::isOperationsUser($user)) {
+            $activeNav = 'ops_projects';
+        } elseif (AuthorizationService::isOpsFinanceUser($user)) {
+            $activeNav = 'opfin_projects';
+        } elseif (AuthorizationService::isLogisticsUser($user)) {
+            $activeNav = 'log_projects';
+        }
 
         $this->render('projects/show', [
             'pageTitle' => $project['project_code'] . ' — ' . $project['project_name'],
-            'activeNav' => AuthorizationService::isMarketingUser($user) ? 'marketing_projects' : 'projects',
+            'activeNav' => $activeNav,
             'project' => $project,
             'checklist' => $checklist,
             'workflowHistories' => $workflowHistories,
             'projectLogs' => $projectLogs,
+            'purchaseRequest' => $purchaseRequest,
+            'actualBom' => $actualBom,
+            'purchaseOrders' => $purchaseOrders,
+            'supplierDeliveries' => $supplierDeliveries,
+            'inventoryUnits' => $inventoryUnits,
+            'inventoryTransactions' => $inventoryTransactions,
+            'suppliers' => $suppliers,
             'canEdit' => AuthorizationService::canEditProject($user, $project),
             'canSubmit' => AuthorizationService::canSubmitProject($user, $project),
             'canUploadDocument' => AuthorizationService::canUploadDocument($user, $project),
@@ -131,7 +171,27 @@ final class ProjectController extends Controller
             'canReturnToMarketing' => AuthorizationService::canReturnProjectToMarketing($user, $project),
             'canStartReview' => AuthorizationService::canStartReview($user, $project),
             'canCompleteVerification' => AuthorizationService::canCompleteVerification($user, $project),
+            'canForwardToAdminFinance' => AuthorizationService::canForwardToAdminFinance($user, $project),
+            'canStartAdminFinanceReview' => AuthorizationService::canStartAdminFinanceReview($user, $project),
             'canIssueJomNumber' => AuthorizationService::canIssueJomNumber($user, $project),
+            'canForwardToOperations' => AuthorizationService::canForwardToOperations($user, $project),
+            'canPreparePr' => AuthorizationService::canPreparePurchaseRequest($user, $project, $purchaseRequest),
+            'canSubmitPr' => AuthorizationService::canSubmitPurchaseRequest($user, $project, $purchaseRequest),
+            'canReviewPr' => AuthorizationService::canReviewPurchaseRequest($user, $project, $purchaseRequest),
+            'canApprovePr' => AuthorizationService::canApprovePurchaseRequest($user, $project, $purchaseRequest),
+            'canRejectPr' => AuthorizationService::canRejectPurchaseRequest($user, $project, $purchaseRequest),
+            'canUploadActualBom' => AuthorizationService::canUploadActualBom($user, $project, $purchaseRequest, $actualBom),
+            'canSubmitActualBom' => AuthorizationService::canSubmitActualBom($user, $project, $purchaseRequest, $actualBom),
+            'canReviewActualBom' => AuthorizationService::canReviewActualBom($user, $project, $actualBom),
+            'canCreatePo' => AuthorizationService::canCreatePurchaseOrder($user, $project, $purchaseRequest),
+            'canAuthorizePo' => $activePo !== null && AuthorizationService::canAuthorizePurchaseOrder($user, $project, $activePo),
+            'canIssuePo' => $activePo !== null && AuthorizationService::canIssuePurchaseOrder($user, $project, $activePo),
+            'canReceiveDelivery' => $activePo !== null && AuthorizationService::canReceiveSupplierDelivery($user, $project, $activePo),
+            'canExecuteStockIn' => $activeDelivery !== null && AuthorizationService::canExecuteStockIn($user, $project, $activeDelivery),
+            'operationsHandoffDocs' => ProjectDocument::operationsHandoffDocuments($projectId),
+            'jomConfig' => (array) Config::get('app.jom', []),
+            'prConfig' => (array) Config::get('pm.pr', []),
+            'actualBomConfig' => (array) Config::get('pm.actual_bom', []),
             'documentCategories' => (array) Config::get('app.uploads.document_categories', []),
             'maxUploadMb' => round((int) Config::get('app.uploads.max_size_bytes', 10485760) / 1048576, 1),
             'openUploadType' => (string) $request->query('upload', ''),

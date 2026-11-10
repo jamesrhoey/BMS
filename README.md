@@ -5,11 +5,11 @@ Integrated web-based **Business Management System (BMS)** built for **SYB** usin
 This single-application, shared-database platform supports all six SYB company departments:
 
 1. **Marketing** (`MKT`) — **Implemented**
-2. **Project Management** (`PM`) — *Minimal incoming verification queue & return-for-corrections handoff active; full module & JOM issuance pending*
-3. **Operations** (`OPS`) — *Foundation workspace active; workflow module pending*
-4. **Logistics** (`LOG`) — *Foundation workspace active; workflow module pending*
+2. **Project Management** (`PM`) — **Implemented** *(Document verification, return for corrections, approval, and forwarding to Admin Finance; PM does not issue JOM numbers)*
+3. **Admin Finance** (`ADMFIN`) — *Incoming queue for PM-approved projects & JOM issuance service prepared; full module pending*
+4. **Operations** (`OPS`) — *Foundation workspace active; workflow module pending*
 5. **Operation Finance** (`OPFIN`) — *Foundation workspace active; workflow module pending*
-6. **Admin Finance** (`ADMFIN`) — *Foundation workspace active; workflow module pending*
+6. **Logistics** (`LOG`) — *Foundation workspace active; workflow module pending*
 
 ---
 
@@ -202,19 +202,23 @@ Following `FLOWCHART REPORT - SYB.PPTX` (Slide 5 — Standard Project Workflow),
 
 - **Special Project Workflows:** Extra documents appearing only in special workflows in the presentation (such as client Purchase Orders in Slides 13/21) are **not** silently forced onto standard projects. Additional workflow definitions can be added in `config/marketing.php` under `workflows` without schema changes.
 - **Upload Completeness vs PM Approval:** Uploading a checklist file sets its checklist status to **`Uploaded`** (`v1`) or **`Replaced`** (`v2+`, with all prior versions preserved in `project_documents` and `storage/documents/`). It never marks a document as `"Approved"` because document verification belongs to **Project Management**.
-- **No JOM Assignment in Marketing:** Marketing projects use internal registry codes (`PRJ-YYYYMMDD-XXXXXX`). JOM (Job Order Memorandum) number issuance is deferred strictly to the Project Management module after verification.
+- **Official Company Workflow (`MARKETING → PROJECT MANAGEMENT → ADMIN FINANCE → OPERATIONS → OPS FINANCE → ADMIN FINANCE`):** Marketing projects use internal registry codes (`PRJ-YYYYMMDD-XXXXXX`). Project Management is responsible strictly for checking and verifying the 6 submitted documents and forwarding approved projects to **Admin Finance**. **Admin Finance (`ADMFIN`)** is responsible for issuing the official JOM (Job Order Memorandum) number.
 
 ### B. Workflow Stages & Handoff Rules
 - **`Draft`** -> Initial registration saved by Marketing (or Admin).
 - **`Preparing Documents`** -> Triggered explicitly via **Start Document Preparation** or automatically on first Marketing checklist upload.
-- **`Submitted for Document Verification`** -> Enabled only when all 6 required Marketing documents are uploaded (enforced on the server). Routes `current_department_id` to `PM`, locks Marketing edits/uploads while under PM review, records `project_workflow_histories` + `activity_logs`, and sends in-app notifications to active `PM` users.
-- **`Returned for Corrections`** -> Minimal shared PM handoff integration (`POST /projects/{id}/return-to-marketing`) restricted strictly to `PM` users and `Administrator` (Marketing users receive `403`). Stores `return_reason` and optional `attention_documents`, routes custody back to `MKT`, notifies active `MKT` users, and unlocks Marketing edits/replacements.
+- **`Submitted for Document Verification` / `Submitted for Verification`** -> Enabled only when all 6 required Marketing documents are uploaded (enforced on the server). Routes `current_department_id` to `PM`, locks Marketing edits/uploads while under PM review, records `project_workflow_histories` + `activity_logs`, and sends in-app notifications to active `PM` users.
+- **`Under Review`** -> Triggered when Project Management initiates formal document inspection (`POST /projects/{id}/start-review`).
+- **`Returned for Corrections` / `Returned to Marketing for Corrections`** -> PM handoff integration (`POST /projects/{id}/return-to-marketing`) restricted strictly to `PM` users and `Administrator` (Marketing users receive `403`). Stores `return_reason` and optional `attention_documents`, routes custody back to `MKT`, notifies active `MKT` users, and unlocks Marketing edits/replacements.
 - **`Resubmitted for Verification`** -> Recorded when Marketing replaces/completes documents on a returned project and resubmits to `PM`.
+- **`Approved by Project Management`** -> Recorded when Project Management approves all 6 required checklist documents (`POST /projects/{id}/complete-verification`). Does **not** automatically generate a JOM number.
+- **`Forwarded to Admin Finance`** -> Recorded when Project Management forwards an approved project to Admin Finance (`POST /projects/{id}/forward-to-admin-finance`). Routes `current_department_id` to `ADMFIN`, records `forwarded_to_afin_by` and `forwarded_to_afin_at`, prevents duplicate forwarding, and places the project in the Admin Finance Incoming Project Queue awaiting JOM number assignment before proceeding to Operations.
 
-### C. Shared Marketing Team Access Policy
+### C. Shared Department Access Policy
 - All active **Marketing (`MKT`)** users share team-wide visibility and collaboration rights on Marketing-originated projects (`origin_department_id = MKT`), allowing any authorized Marketing specialist to upload checklist items, review PM return notes, upload `v2+` replacements, and resubmit.
-- **Project Management (`PM`)** users can view projects routed to `PM` (`current_department_id = PM`), download checklist documents for review, and return incomplete packages to Marketing.
-- Unrelated departments (`OPS`, `LOG`, `OPFIN`, `ADMFIN`) are blocked (`403`) from `/marketing/*` routes, Marketing project views, and Marketing document downloads.
+- **Project Management (`PM`)** users can view projects submitted to `PM`, inspect/download checklist documents, approve or return submissions with correction notes, and forward approved projects to Admin Finance. PM users cannot issue JOM numbers (`403`).
+- **Admin Finance (`ADMFIN`)** users can view projects forwarded to Admin Finance in their incoming project queue and use the refactored JOM issuance service.
+- Unrelated departments (`OPS`, `LOG`, `OPFIN`) are blocked (`403`) from `/marketing/*` and `/pm/*` routes and unauthorized project actions.
 - **Administrators** retain full cross-department visibility and audit access.
 
 ---

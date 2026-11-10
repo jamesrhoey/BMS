@@ -100,12 +100,24 @@ if (!function_exists('project_status_badge_class')) {
         return match ($status) {
             'Draft' => 'badge-soft-secondary',
             'Preparing Documents' => 'badge-soft-warning',
-            'Submitted for Document Verification', 'Submitted' => 'badge-soft-primary',
+            'Submitted for Document Verification', 'Submitted for Verification', 'Submitted' => 'badge-soft-primary',
             'Under Review' => 'badge-soft-warning',
             'Resubmitted for Verification' => 'badge-soft-info',
-            'Returned for Corrections' => 'badge-soft-danger',
-            'Document Verification Completed' => 'badge-soft-success',
-            'JOM Number Issued' => 'badge-soft-success',
+            'Returned for Corrections', 'Returned to Marketing for Corrections' => 'badge-soft-danger',
+            'Approved by Project Management', 'Document Verification Completed' => 'badge-soft-success',
+            'Forwarded to Admin Finance' => 'badge-soft-primary',
+            'Under Admin Finance Review' => 'badge-soft-warning',
+            'JOM Issued', 'JOM Number Issued' => 'badge-soft-success',
+            'Forwarded to Operations' => 'badge-soft-info',
+            'PR Being Prepared' => 'badge-soft-warning',
+            'PR Submitted to OPS Finance', 'Submitted to OPS Finance' => 'badge-soft-primary',
+            'Under OPS Finance Review' => 'badge-soft-warning',
+            'Actual BOM Pending Upload' => 'badge-soft-warning',
+            'Actual BOM Submitted to Admin Finance', 'Submitted to Admin Finance', 'Actual BOM Submitted' => 'badge-soft-primary',
+            'Actual BOM Received by Admin Finance', 'Received' => 'badge-soft-info',
+            'Actual BOM Under Admin Finance Review' => 'badge-soft-warning',
+            'Actual BOM Returned for Corrections' => 'badge-soft-danger',
+            'Actual BOM Accepted by Admin Finance', 'Accepted' => 'badge-soft-success',
             default => 'badge-soft-secondary',
         };
     }
@@ -118,6 +130,71 @@ if (!function_exists('checklist_status_badge_class')) {
             'Uploaded' => 'badge-soft-success',
             'Replaced' => 'badge-soft-info',
             'Missing' => 'badge-soft-danger',
+            default => 'badge-soft-secondary',
+        };
+    }
+}
+
+if (!function_exists('pr_status_badge_class')) {
+    function pr_status_badge_class(string $status): string
+    {
+        return match ($status) {
+            'Draft' => 'badge-soft-secondary',
+            'Submitted', 'Submitted to OPS Finance' => 'badge-soft-primary',
+            'Under Review', 'Under OPS Finance Review' => 'badge-soft-warning',
+            'Returned for Revision', 'Returned for Corrections' => 'badge-soft-danger',
+            'Approved' => 'badge-soft-success',
+            'Rejected' => 'badge-soft-danger',
+            'Converted to PO' => 'badge-soft-info',
+            'Partially Ordered' => 'badge-soft-warning',
+            'Fully Ordered' => 'badge-soft-success',
+            'Closed' => 'badge-soft-dark',
+            'Actual BOM Submitted' => 'badge-soft-success',
+            default => 'badge-soft-secondary',
+        };
+    }
+}
+
+if (!function_exists('actual_bom_status_badge_class')) {
+    function actual_bom_status_badge_class(string $status): string
+    {
+        return match ($status) {
+            'Draft' => 'badge-soft-secondary',
+            'Submitted to Admin Finance' => 'badge-soft-primary',
+            'Received' => 'badge-soft-info',
+            'Under Review' => 'badge-soft-warning',
+            'Returned for Corrections' => 'badge-soft-danger',
+            'Accepted' => 'badge-soft-success',
+            default => 'badge-soft-secondary',
+        };
+    }
+}
+
+if (!function_exists('po_status_badge_class')) {
+    function po_status_badge_class(string $status): string
+    {
+        return match ($status) {
+            'Draft' => 'badge-soft-secondary',
+            'Pending Approval' => 'badge-soft-warning',
+            'Approved' => 'badge-soft-info',
+            'Issued to Supplier' => 'badge-soft-primary',
+            'Partially Received' => 'badge-soft-warning',
+            'Fully Received' => 'badge-soft-success',
+            'Closed' => 'badge-soft-dark',
+            'Cancelled' => 'badge-soft-danger',
+            default => 'badge-soft-secondary',
+        };
+    }
+}
+
+if (!function_exists('delivery_status_badge_class')) {
+    function delivery_status_badge_class(string $status): string
+    {
+        return match ($status) {
+            'Pending Inspection' => 'badge-soft-warning',
+            'Inspected' => 'badge-soft-info',
+            'Stocked In' => 'badge-soft-success',
+            'Discrepancy' => 'badge-soft-danger',
             default => 'badge-soft-secondary',
         };
     }

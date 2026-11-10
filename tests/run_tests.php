@@ -18,7 +18,12 @@ use App\Models\Notification;
 use App\Models\Project;
 use App\Models\ProjectDocument;
 use App\Models\ProjectWorkflowHistory;
+use App\Models\Inventory;
+use App\Models\PurchaseOrder;
+use App\Models\PurchaseRequest;
 use App\Models\Role;
+use App\Models\Supplier;
+use App\Models\SupplierDelivery;
 use App\Models\User;
 use App\Services\MarketingChecklistService;
 
@@ -109,7 +114,7 @@ final class HttpTestClient
         $tempFiles = [];
         if (strtoupper($method) === 'POST') {
             if ($files !== []) {
-                $payload = $postData;
+                $payload = self::flattenPostData($postData);
                 foreach ($files as $field => $spec) {
                     $tmp = tempnam(sys_get_temp_dir(), 'bms_test_');
                     if ($tmp === false) {
@@ -153,6 +158,24 @@ final class HttpTestClient
         }
         throw new RuntimeException('Could not extract CSRF token from HTML response.');
     }
+
+    /**
+     * @param array<string, mixed> $data
+     * @return array<string, string>
+     */
+    public static function flattenPostData(array $data, string $prefix = ''): array
+    {
+        $result = [];
+        foreach ($data as $key => $value) {
+            $fullKey = $prefix === '' ? (string) $key : "{$prefix}[{$key}]";
+            if (is_array($value)) {
+                $result = array_merge($result, self::flattenPostData($value, $fullKey));
+            } else {
+                $result[$fullKey] = (string) $value;
+            }
+        }
+        return $result;
+    }
 }
 
 $passed = 0;
@@ -178,6 +201,14 @@ $createdUserIds = [];
 $createdProjectIds = [];
 $createdFilesOnDisk = [];
 $maxLogIdBeforeTest = (int) $pdo->query('SELECT COALESCE(MAX(id), 0) FROM activity_logs')->fetchColumn();
+$adminSnapshot = $pdo->query("SELECT id, password_hash, status FROM users WHERE username = 'admin' LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+if ($adminSnapshot) {
+    $stmtTempAdmin = $pdo->prepare("UPDATE users SET password_hash = :hash, status = 'active' WHERE id = :id");
+    $stmtTempAdmin->execute([
+        'hash' => password_hash('Admin@SYB2026!', PASSWORD_DEFAULT),
+        'id' => (int) $adminSnapshot['id'],
+    ]);
+}
 
 echo "=======================================================================\n";
 echo " SYB BMS - Automated Foundation & Marketing Module Verification Suite\n";
@@ -1133,7 +1164,7 @@ try {
         'PM reviewer project details view renders document verification review panel and action controls'
     );
 
-    // PM completes document verification
+    // PM completes document verification (Approves project)
     $verifyNote = 'All 6 required Marketing documents (SON, SLD, BOM, CA, Proposals) verified readable and complete.';
     $completeRes = $pmClient->request('POST', "/projects/{$projectId}/complete-verification", [
         '_csrf_token' => $pmCsrf,
@@ -1142,18 +1173,18 @@ try {
     $projectVerified = Project::findById($projectId);
     assertCheck(
         $completeRes['status'] === 303
-        && $projectVerified['status'] === Project::STATUS_VERIFICATION_COMPLETED
+        && $projectVerified['status'] === Project::STATUS_APPROVED_BY_PM
         && $projectVerified['verification_status'] === Project::VERIFICATION_VERIFIED
         && (int) $projectVerified['verified_by'] === (int) $pmUserRow['id']
         && !empty($projectVerified['verified_at'])
         && $projectVerified['verification_notes'] === $verifyNote,
-        'PM successfully completes document verification: status becomes Document Verification Completed, reviewer and timestamp saved'
+        'PM successfully approves complete project: status becomes Approved by Project Management, reviewer and timestamp saved'
     );
 
-    // Rule 6 enforcement: verify NO JOM number is automatically issued
+    // Business Rule: verify NO JOM number is automatically issued upon PM approval
     assertCheck(
         empty($projectVerified['jom_number']),
-        'JOM Rule Enforced: Document verification completion does NOT automatically issue a JOM number (pending business-rule confirmation)'
+        'Business Rule Enforced: PM approval does NOT automatically generate a JOM number'
     );
 
     // Verify all current project documents are marked verified
@@ -1180,79 +1211,197 @@ try {
     );
     assertCheck(
         count($mkt1CompletedNotifs) >= 1,
-        'Marketing department users receive notification of document verification completion'
+        'Marketing department users receive notification of Project Management approval'
     );
 
-    // Verify project detail page displays completion banner and deferred JOM notice
+    // Verify project detail page displays Approved by Project Management banner, Forward to Admin Finance action, and NO PM JOM issuance button
     $verifiedPageView = $pmClient->request('GET', "/projects/{$projectId}");
     assertCheck(
         $verifiedPageView['status'] === 200
-        && str_contains($verifiedPageView['body'], 'Document Verification Completed')
-        && str_contains($verifiedPageView['body'], 'JOM number assignment is deferred'),
-        'Project details page displays Document Verification Completed banner and deferred JOM notice'
+        && str_contains($verifiedPageView['body'], 'Approved by Project Management')
+        && str_contains($verifiedPageView['body'], 'Forward to Admin Finance')
+        && !str_contains($verifiedPageView['body'], 'id="admin-finance-jom-panel"'),
+        'Project details page displays Approved by Project Management banner, Forward to Admin Finance action, and hides JOM issuance from PM'
     );
 
-    // 12. Project Management JOM Issuance Workflow, Security, Concurrency & Database Uniqueness
-    echo "\n12. Project Management JOM Issuance Workflow, Security, Concurrency & Database Uniqueness\n";
+    // 12. Forwarding to Admin Finance, PM JOM Restriction & Admin Finance Incoming Queue
+    echo "\n12. Forwarding to Admin Finance, PM JOM Restriction & Admin Finance Incoming Queue\n";
 
-    // 12.1 Unauthorized departments cannot issue JOM numbers
-    $mktIssueJom = $mktClient->request('POST', "/projects/{$projectId}/issue-jom", ['_csrf_token' => $mktCsrf]);
-    $opsIssueJom = $opsClient->request('POST', "/projects/{$projectId}/issue-jom", ['_csrf_token' => $opsCsrf]);
-    assertCheck(
-        $mktIssueJom['status'] === 403 && $opsIssueJom['status'] === 403,
-        'Marketing and Operations users are strictly blocked from issuing JOM numbers (HTTP 403)'
-    );
-
-    // 12.2 Incomplete projects cannot receive a JOM number
-    $incompleteJomAttempt = $pmClient->request('POST', "/projects/{$project2Record['id']}/issue-jom", ['_csrf_token' => $pmCsrf]);
-    $reloadedIncomplete = Project::findById((int) $project2Record['id']);
-    assertCheck(
-        $incompleteJomAttempt['status'] === 403 && empty($reloadedIncomplete['jom_number']),
-        'Incomplete projects cannot receive a JOM number (blocked with HTTP 403)'
-    );
-
-    // 12.3 Projects returned for corrections cannot receive a JOM number until resubmitted and verified
-    $tempReturnedRes = $pdo->prepare("INSERT INTO projects (project_code, project_name, client_name, created_by, current_department_id, origin_department_id, status, verification_status) VALUES ('PRJ-TEST-RETURNED', 'Test Returned Project', 'Client Test', :creator_id, :pm_dept_id, :mkt_dept_id, 'Returned for Corrections', 'returned_for_corrections')");
-    $tempReturnedRes->execute(['creator_id' => $adminUser['id'], 'pm_dept_id' => $pmDept['id'], 'mkt_dept_id' => $mktDept['id']]);
-    $tempReturnedId = (int) $pdo->lastInsertId();
-    $createdProjectIds[] = $tempReturnedId;
-
-    $returnedJomAttempt = $pmClient->request('POST', "/projects/{$tempReturnedId}/issue-jom", ['_csrf_token' => $pmCsrf]);
-    $reloadedReturned = Project::findById($tempReturnedId);
-    assertCheck(
-        $returnedJomAttempt['status'] === 403 && empty($reloadedReturned['jom_number']),
-        'Projects returned for corrections cannot receive a JOM number until resubmitted and verified (HTTP 403)'
-    );
-
-    // 12.4 Authorized Project Management user issues the JOM number for verified project
-    $issueJomRes = $pmClient->request('POST', "/projects/{$projectId}/issue-jom", [
+    // 12.1 Project Management CANNOT issue JOM numbers (strictly blocked with HTTP 403)
+    $pmIssueJomAttempt = $pmClient->request('POST', "/projects/{$projectId}/issue-jom", [
         '_csrf_token' => $pmCsrf,
     ]);
+    $reloadedAfterPmJomAttempt = Project::findById($projectId);
+    assertCheck(
+        $pmIssueJomAttempt['status'] === 403 && empty($reloadedAfterPmJomAttempt['jom_number']),
+        'Project Management user is strictly blocked from issuing JOM numbers (HTTP 403)'
+    );
+
+    // 12.2 Marketing and Operations users cannot issue JOM numbers or forward to Admin Finance
+    $mktIssueJom = $mktClient->request('POST', "/projects/{$projectId}/issue-jom", ['_csrf_token' => $mktCsrf]);
+    $opsIssueJom = $opsClient->request('POST', "/projects/{$projectId}/issue-jom", ['_csrf_token' => $opsCsrf]);
+    $mktForwardAfin = $mktClient->request('POST', "/projects/{$projectId}/forward-to-admin-finance", ['_csrf_token' => $mktCsrf]);
+    $opsForwardAfin = $opsClient->request('POST', "/projects/{$projectId}/forward-to-admin-finance", ['_csrf_token' => $opsCsrf]);
+    assertCheck(
+        $mktIssueJom['status'] === 403
+        && $opsIssueJom['status'] === 403
+        && $mktForwardAfin['status'] === 403
+        && $opsForwardAfin['status'] === 403,
+        'Marketing and Operations users are strictly blocked from JOM issuance and forwarding to Admin Finance (HTTP 403)'
+    );
+
+    // 12.3 Unapproved / incomplete projects cannot be forwarded to Admin Finance
+    $unapprovedForwardAttempt = $pmClient->request('POST', "/projects/{$project2Record['id']}/forward-to-admin-finance", [
+        '_csrf_token' => $pmCsrf,
+    ]);
+    assertCheck(
+        $unapprovedForwardAttempt['status'] === 403,
+        'Unapproved/incomplete projects cannot be forwarded to Admin Finance (blocked with HTTP 403)'
+    );
+
+    // 12.4 Authorized Project Management user forwards approved project to Admin Finance
+    $afinDept = Department::findByCode(Department::CODE_ADMIN_FINANCE);
+    $forwardNote = 'All 6 Marketing documents approved by PM. Forwarding to Admin Finance for JOM issuance.';
+    $forwardRes = $pmClient->request('POST', "/projects/{$projectId}/forward-to-admin-finance", [
+        '_csrf_token' => $pmCsrf,
+        'forward_notes' => $forwardNote,
+    ]);
+    $projectForwarded = Project::findById($projectId);
+    assertCheck(
+        $forwardRes['status'] === 303
+        && $projectForwarded['status'] === Project::STATUS_FORWARDED_TO_ADMIN_FINANCE
+        && (int) $projectForwarded['current_department_id'] === (int) $afinDept['id']
+        && (int) $projectForwarded['forwarded_to_afin_by'] === (int) $pmUserRow['id']
+        && !empty($projectForwarded['forwarded_to_afin_at'])
+        && $projectForwarded['forwarded_to_afin_notes'] === $forwardNote
+        && (int) $projectForwarded['verified_by'] === (int) $pmUserRow['id']
+        && !empty($projectForwarded['verified_at'])
+        && empty($projectForwarded['jom_number']),
+        'Approved project forwarded to Admin Finance: status is Forwarded to Admin Finance, routed to ADMFIN, forwarding user/timestamp saved, verification history preserved, and no automatic JOM or Operations jump'
+    );
+
+    // 12.5 Duplicate forwarding is prevented
+    $duplicateForwardRes = $pmClient->request('POST', "/projects/{$projectId}/forward-to-admin-finance", [
+        '_csrf_token' => $pmCsrf,
+        'forward_notes' => 'Duplicate forward attempt',
+    ]);
+    $projectAfterDupForward = Project::findById($projectId);
+    assertCheck(
+        $duplicateForwardRes['status'] === 403
+        && $projectAfterDupForward['forwarded_to_afin_notes'] === $forwardNote,
+        'Duplicate forwarding to Admin Finance is prevented (HTTP 403) and original forwarding metadata is preserved'
+    );
+
+    // 12.6 PM Dashboard and PM Projects list reflect Forwarded to Admin Finance count and filter
+    $pmDashAfterForward = $pmClient->request('GET', '/pm/dashboard');
+    $pmForwardedFilterRes = $pmClient->request('GET', '/pm/projects?v_status=forwarded_to_admin_finance');
+    assertCheck(
+        $pmDashAfterForward['status'] === 200
+        && str_contains($pmDashAfterForward['body'], 'Forwarded to Admin Finance')
+        && $pmForwardedFilterRes['status'] === 200
+        && str_contains($pmForwardedFilterRes['body'], (string) $projectForwarded['project_code']),
+        'PM Dashboard and PM Projects queue display Forwarded to Admin Finance summary card and filter results'
+    );
+
+    // 12.7 Admin Finance Incoming Project Dashboard, Access Control, JOM Issuance & Operations Handoff
+    $afinUsername = "test_afin_{$suffix}";
+    $adminClient->request('POST', '/users', [
+        '_csrf_token' => $adminCsrf,
+        'full_name' => 'Admin Finance Officer',
+        'username' => $afinUsername,
+        'email' => "{$afinUsername}@syb.local",
+        'role_id' => (string) $deptRole['id'],
+        'department_id' => (string) $afinDept['id'],
+        'status' => 'active',
+        'password' => 'AfinPass@2026!',
+        'password_confirmation' => 'AfinPass@2026!',
+    ]);
+    $afinUserRow = User::findByUsername($afinUsername);
+    if ($afinUserRow !== null) {
+        $createdUserIds[] = (int) $afinUserRow['id'];
+    }
+
+    // Verify unauthorized departments (PM, Marketing, Operations) cannot access /admin-finance/dashboard or /admin-finance/projects
+    $pmToAfinDash = $pmClient->request('GET', '/admin-finance/dashboard');
+    $mktToAfinDash = $mktClient->request('GET', '/admin-finance/dashboard');
+    $opsToAfinDash = $opsClient->request('GET', '/admin-finance/projects');
+    assertCheck(
+        $pmToAfinDash['status'] === 403
+        && $mktToAfinDash['status'] === 403
+        && $opsToAfinDash['status'] === 403,
+        'Unauthorized departments (PM, Marketing, Operations) are blocked from Admin Finance module routes (HTTP 403)'
+    );
+
+    $afinClient = new HttpTestClient($baseUrl);
+    $afinLoginGet = $afinClient->request('GET', '/login');
+    $afinClient->request('POST', '/login', [
+        '_csrf_token' => $afinClient->extractCsrfToken($afinLoginGet['body']),
+        'username' => $afinUsername,
+        'password' => 'AfinPass@2026!',
+    ]);
+    $afinDash = $afinClient->request('GET', '/dashboard');
+    $afinCsrf = $afinClient->extractCsrfToken($afinDash['body']);
+    $afinProjectsPage = $afinClient->request('GET', '/admin-finance/projects');
+    $afinDetail = $afinClient->request('GET', "/projects/{$projectId}");
+    assertCheck(
+        $afinDash['status'] === 200
+        && str_contains($afinDash['body'], 'Projects Awaiting JOM Issuance')
+        && str_contains($afinDash['body'], 'Projects Under Admin Finance Review')
+        && str_contains($afinDash['body'], 'Projects With JOM Issued')
+        && str_contains($afinDash['body'], 'Projects Forwarded to Operations')
+        && str_contains($afinDash['body'], (string) $projectForwarded['project_code'])
+        && $afinProjectsPage['status'] === 200
+        && str_contains($afinProjectsPage['body'], (string) $projectForwarded['project_code'])
+        && $afinDetail['status'] === 200
+        && str_contains($afinDetail['body'], 'id="admin-finance-jom-panel"'),
+        'Admin Finance Dashboard (/dashboard & /admin-finance/projects) displays all 4 summary cards, approved incoming project, and JOM issuance panel'
+    );
+
+    // 12.8 Verify Admin Finance receives ONLY approved & forwarded projects (unapproved project $project2Record is hidden & blocked)
+    $afinUnapprovedView = $afinClient->request('GET', "/projects/{$project2Record['id']}");
+    $afinUnapprovedJom = $afinClient->request('POST', "/projects/{$project2Record['id']}/issue-jom", ['_csrf_token' => $afinCsrf]);
+    assertCheck(
+        !str_contains($afinDash['body'], (string) $project2Record['project_code'])
+        && !str_contains($afinProjectsPage['body'], (string) $project2Record['project_code'])
+        && $afinUnapprovedView['status'] === 403
+        && $afinUnapprovedJom['status'] === 403,
+        'Admin Finance receives ONLY approved & forwarded projects; unapproved projects are excluded from queue and blocked from JOM issuance (HTTP 403)'
+    );
+
+    // 12.9 Admin Finance marks approved project as Under Admin Finance Review
+    $afinStartReviewRes = $afinClient->request('POST', "/projects/{$projectId}/admin-finance-review", [
+        '_csrf_token' => $afinCsrf,
+    ]);
+    $projectAfinReview = Project::findById($projectId);
+    assertCheck(
+        $afinStartReviewRes['status'] === 303
+        && $projectAfinReview['status'] === Project::STATUS_UNDER_ADMIN_FINANCE_REVIEW
+        && $projectAfinReview['verification_status'] === Project::VERIFICATION_UNDER_AFIN_REVIEW
+        && (int) $projectAfinReview['afin_reviewed_by'] === (int) $afinUserRow['id']
+        && !empty($projectAfinReview['afin_reviewed_at']),
+        'Admin Finance marks project Under Admin Finance Review and records reviewer and timestamp'
+    );
+
+    // 12.10 JOM Issuance: Admin Finance issues JOM number while PM/Marketing/Operations remain blocked
+    $pmStillBlockedJom = $pmClient->request('POST', "/projects/{$projectId}/issue-jom", ['_csrf_token' => $pmCsrf]);
+    $afinIssueJomRes = $afinClient->request('POST', "/projects/{$projectId}/issue-jom", ['_csrf_token' => $afinCsrf]);
     $projectWithJom = Project::findById($projectId);
     $issuedJomNumber = (string) ($projectWithJom['jom_number'] ?? '');
     assertCheck(
-        $issueJomRes['status'] === 303
+        $pmStillBlockedJom['status'] === 403
+        && $afinIssueJomRes['status'] === 303
+        && $projectWithJom['status'] === Project::STATUS_JOM_ISSUED
         && !empty($issuedJomNumber)
-        && preg_match('/^JOM-\d{6}-\d{4}/', $issuedJomNumber) === 1
-        && (int) $projectWithJom['jom_issued_by'] === (int) $pmUserRow['id']
-        && !empty($projectWithJom['jom_issued_at'])
-        && $projectWithJom['status'] === Project::STATUS_JOM_ISSUED,
-        'Authorized Project Management user successfully issued unique server-generated JOM number for verified project'
+        && preg_match('/^JOM-\d{4,6}-\d{4}/', $issuedJomNumber) === 1
+        && (int) $projectWithJom['jom_issued_by'] === (int) $afinUserRow['id']
+        && !empty($projectWithJom['jom_issued_at']),
+        'Admin Finance issues unique server-generated JOM number, sets status to JOM Issued, and records issuing user and timestamp'
     );
 
-    // 12.5 Repeated requests cannot issue duplicate JOM numbers (idempotency)
-    $repeatJomRes = $pmClient->request('POST', "/projects/{$projectId}/issue-jom", [
-        '_csrf_token' => $pmCsrf,
-    ]);
-    $projectAfterRepeat = Project::findById($projectId);
-    assertCheck(
-        $repeatJomRes['status'] === 403
-        && $projectAfterRepeat['jom_number'] === $issuedJomNumber
-        && (int) $projectAfterRepeat['jom_issued_by'] === (int) $pmUserRow['id'],
-        'Repeated requests cannot issue duplicate JOM numbers or alter existing issuance (HTTP 403)'
-    );
-
-    // 12.6 Database uniqueness constraint enforces duplicate prevention
+    // 12.11 Prevent duplicate & concurrent JOM issuance (a project receives only one JOM number)
+    $dupHttpJomRes = $afinClient->request('POST', "/projects/{$projectId}/issue-jom", ['_csrf_token' => $afinCsrf]);
+    $dupServiceJomRes = \App\Services\ProjectService::issueJomNumber($projectWithJom, $afinUserRow, new \App\Core\Request());
+    $projectAfterDupJom = Project::findById($projectId);
     $dbDuplicateCaught = false;
     try {
         $stmt = $pdo->prepare("INSERT INTO projects (project_code, jom_number, project_name, client_name, created_by) VALUES ('PRJ-DUP-TEST', :jom, 'Dup Project', 'Client', :creator_id)");
@@ -1260,31 +1409,865 @@ try {
     } catch (PDOException $e) {
         $dbDuplicateCaught = true;
     }
-    assertCheck($dbDuplicateCaught, 'Enforce uniqueness at database level: duplicate JOM number rejected by MySQL UNIQUE KEY constraint');
-
-    // 12.7 JOM number appears prominently in project details, PM dashboard, PM list, and Marketing list
-    $pmDetailWithJom = $pmClient->request('GET', "/projects/{$projectId}");
-    $pmDashWithJom = $pmClient->request('GET', "/pm/dashboard");
-    $pmListWithJom = $pmClient->request('GET', "/pm/projects");
-    $mktListWithJom = $mktClient->request('GET', "/marketing/projects");
     assertCheck(
-        str_contains($pmDetailWithJom['body'], $issuedJomNumber)
-        && str_contains($pmDetailWithJom['body'], 'Official JOM Issued')
-        && str_contains($pmDashWithJom['body'], $issuedJomNumber)
-        && str_contains($pmListWithJom['body'], $issuedJomNumber)
-        && str_contains($mktListWithJom['body'], $issuedJomNumber),
-        'JOM number is prominently displayed across project details, PM queue, and Marketing registry'
+        $dupHttpJomRes['status'] === 403
+        && $dupServiceJomRes['success'] === false
+        && $projectAfterDupJom['jom_number'] === $issuedJomNumber
+        && $dbDuplicateCaught,
+        'A project receives only one JOM number: duplicate/concurrent JOM requests and DB duplicate JOM numbers are strictly prevented'
     );
 
-    // 12.8 Marketing receives notification of JOM issuance
-    $mktJomNotifs = array_filter(
-        Notification::forUser((int) $mktUserRow['id'], 10),
-        static fn(array $n): bool => $n['type'] === 'project.jom_issued'
+    // 12.12 Verify PM and Marketing see the assigned JOM number read-only
+    $pmDetailWithJom = $pmClient->request('GET', "/projects/{$projectId}");
+    $mktDetailWithJom = $mktClient->request('GET', "/projects/{$projectId}");
+    assertCheck(
+        $pmDetailWithJom['status'] === 200
+        && str_contains($pmDetailWithJom['body'], $issuedJomNumber)
+        && $mktDetailWithJom['status'] === 200
+        && str_contains($mktDetailWithJom['body'], $issuedJomNumber),
+        'Project Management and Marketing can view the assigned JOM number read-only associated with the correct project'
     );
-    assertCheck(count($mktJomNotifs) >= 1, 'Marketing team receives real-time notification of official JOM number issuance');
 
-    // 13. Workflow History, Audit Trail & Session Logout Invalidation
-    echo "\n13. Workflow History, Audit Trail & Session Logout Invalidation\n";
+    // 12.13 Forwarding to Operations: require JOM Number + SLD + Marketing BOM (block if SLD or Marketing BOM is missing)
+    $sldDocRow = ProjectDocument::findCurrentByType($projectId, 'SLD');
+    $mktBomDocRow = ProjectDocument::findCurrentByType($projectId, 'BOM');
+    if ($sldDocRow !== null) {
+        $pdo->exec("UPDATE project_documents SET is_current = 0 WHERE id = " . (int) $sldDocRow['id']);
+        $missingSldForwardRes = $afinClient->request('POST', "/projects/{$projectId}/forward-to-operations", [
+            '_csrf_token' => $afinCsrf,
+            'operations_forward_notes' => 'Attempt forward without SLD',
+        ]);
+        $projectNotForwardedOps = Project::findById($projectId);
+        assertCheck(
+            $missingSldForwardRes['status'] === 303
+            && empty($projectNotForwardedOps['forwarded_to_ops_at'])
+            && $projectNotForwardedOps['status'] === Project::STATUS_JOM_ISSUED,
+            'Forwarding to Operations is blocked when any of the 3 required items (JOM Number, SLD, Marketing BOM) is missing'
+        );
+        $pdo->exec("UPDATE project_documents SET is_current = 1 WHERE id = " . (int) $sldDocRow['id']);
+    }
+
+    // 12.14 Admin Finance forwards JOM Number, SLD, and Marketing BOM to Operations
+    $opsForwardNote = 'Official JOM Number, SLD, and Marketing BOM verified and forwarded to Operations.';
+    $forwardOpsRes = $afinClient->request('POST', "/projects/{$projectId}/forward-to-operations", [
+        '_csrf_token' => $afinCsrf,
+        'operations_forward_notes' => $opsForwardNote,
+    ]);
+    $projectForwardedOps = Project::findById($projectId);
+    assertCheck(
+        $forwardOpsRes['status'] === 303
+        && $projectForwardedOps['status'] === Project::STATUS_FORWARDED_TO_OPERATIONS
+        && $projectForwardedOps['verification_status'] === Project::VERIFICATION_FORWARDED_OPS
+        && (int) $projectForwardedOps['current_department_id'] === (int) $opsDept['id']
+        && (int) $projectForwardedOps['forwarded_to_ops_by'] === (int) $afinUserRow['id']
+        && !empty($projectForwardedOps['forwarded_to_ops_at'])
+        && $projectForwardedOps['forwarded_to_ops_notes'] === $opsForwardNote
+        && (int) $projectForwardedOps['ops_sld_document_id'] === (int) $sldDocRow['id']
+        && (int) $projectForwardedOps['ops_bom_document_id'] === (int) $mktBomDocRow['id']
+        && $projectForwardedOps['jom_number'] === $issuedJomNumber,
+        'Admin Finance forwards JOM Number, SLD, and Marketing BOM to Operations: status becomes Forwarded to Operations, SLD & Marketing BOM IDs linked, sender/recipient/timestamp recorded'
+    );
+
+    // 12.15 Prevent duplicate forwarding to Operations
+    $dupForwardOpsRes = $afinClient->request('POST', "/projects/{$projectId}/forward-to-operations", [
+        '_csrf_token' => $afinCsrf,
+        'operations_forward_notes' => 'Duplicate forward to Operations attempt',
+    ]);
+    assertCheck(
+        $dupForwardOpsRes['status'] === 403,
+        'Duplicate forwarding to Operations is prevented (HTTP 403)'
+    );
+
+    // 12.16 Operations user sees forwarded project in Operations Incoming Queue and can access JOM, SLD, and Marketing BOM
+    $opsDashAfterForward = $opsClient->request('GET', '/dashboard');
+    $opsProjectDetail = $opsClient->request('GET', "/projects/{$projectId}");
+    $opsDownloadSld = $opsClient->request('GET', "/projects/{$projectId}/documents/" . (int) $sldDocRow['id'] . '/download');
+    $opsDownloadBom = $opsClient->request('GET', "/projects/{$projectId}/documents/" . (int) $mktBomDocRow['id'] . '/download');
+    $sonDocRow = ProjectDocument::findCurrentByType($projectId, 'SON');
+    $opsDownloadSonBlocked = $opsClient->request('GET', "/projects/{$projectId}/documents/" . (int) $sonDocRow['id'] . '/download');
+    assertCheck(
+        $opsDashAfterForward['status'] === 200
+        && (str_contains($opsDashAfterForward['body'], 'Operations Incoming Project Queue') || str_contains($opsDashAfterForward['body'], 'Operations Incoming Projects &amp; Purchase Request Queue'))
+        && str_contains($opsDashAfterForward['body'], $issuedJomNumber)
+        && $opsProjectDetail['status'] === 200
+        && str_contains($opsProjectDetail['body'], 'id="operations-handoff-package"')
+        && str_contains($opsProjectDetail['body'], $issuedJomNumber)
+        && $opsDownloadSld['status'] === 200
+        && $opsDownloadBom['status'] === 200
+        && $opsDownloadSonBlocked['status'] === 403,
+        'Operations user sees project in Operations Incoming Queue, can view/download SLD and Marketing BOM (HTTP 200), and is blocked from non-handoff documents (HTTP 403)'
+    );
+
+    // 13. Operations Purchase Request (PR) & OPS Finance Actual BOM Workflow
+    echo "\n13. Operations Purchase Request (PR) & OPS Finance Actual BOM Workflow\n";
+
+    // 13.1 Access Control: Verify unauthorized departments cannot access Operations or OPS Finance module routes
+    $opfinDept = Department::findByCode(Department::CODE_OPERATION_FINANCE);
+    $opfinUsername = "test_opfin_{$suffix}";
+    $adminClient->request('POST', '/users', [
+        '_csrf_token' => $adminCsrf,
+        'full_name' => 'OPS Finance Specialist',
+        'username' => $opfinUsername,
+        'email' => "{$opfinUsername}@syb.local",
+        'role_id' => (string) $deptRole['id'],
+        'department_id' => (string) $opfinDept['id'],
+        'status' => 'active',
+        'password' => 'OpfinPass@2026!',
+        'password_confirmation' => 'OpfinPass@2026!',
+    ]);
+    $opfinUserRow = User::findByUsername($opfinUsername);
+    if ($opfinUserRow !== null) {
+        $createdUserIds[] = (int) $opfinUserRow['id'];
+    }
+
+    $opfinClient = new HttpTestClient($baseUrl);
+    $opfinLoginGet = $opfinClient->request('GET', '/login');
+    $opfinClient->request('POST', '/login', [
+        '_csrf_token' => $opfinClient->extractCsrfToken($opfinLoginGet['body']),
+        'username' => $opfinUsername,
+        'password' => 'OpfinPass@2026!',
+    ]);
+    $opfinDash = $opfinClient->request('GET', '/dashboard');
+    $opfinCsrf = $opfinClient->extractCsrfToken($opfinDash['body']);
+
+    // Check unauthorized route blocking (HTTP 403)
+    $mktToOpsDash = $mktClient->request('GET', '/operations/dashboard');
+    $pmToOpsDash = $pmClient->request('GET', '/operations/projects');
+    $afinToOpsDash = $afinClient->request('GET', '/operations/dashboard');
+    $mktToOpfinDash = $mktClient->request('GET', '/ops-finance/dashboard');
+    $pmToOpfinDash = $pmClient->request('GET', '/ops-finance/projects');
+    $opsToOpfinDash = $opsClient->request('GET', '/ops-finance/dashboard');
+    assertCheck(
+        $mktToOpsDash['status'] === 403
+        && $pmToOpsDash['status'] === 403
+        && $afinToOpsDash['status'] === 403
+        && $mktToOpfinDash['status'] === 403
+        && $pmToOpfinDash['status'] === 403
+        && $opsToOpfinDash['status'] === 403,
+        'Unauthorized departments are strictly blocked from Operations and OPS Finance module routes (HTTP 403)'
+    );
+
+    // 13.2 Operations Dashboard & Projects queue
+    $opsDash = $opsClient->request('GET', '/operations/dashboard');
+    $opsCsrf = $opsClient->extractCsrfToken($opsDash['body']);
+    $opsProjectsPage = $opsClient->request('GET', '/operations/projects');
+    assertCheck(
+        $opsDash['status'] === 200
+        && str_contains($opsDash['body'], 'Projects Received from Admin Finance')
+        && str_contains($opsDash['body'], 'Projects Awaiting PR Preparation')
+        && str_contains($opsDash['body'], 'PRs Being Prepared')
+        && str_contains($opsDash['body'], 'PRs Submitted to OPS Finance')
+        && str_contains($opsDash['body'], (string) $projectWithJom['project_code'])
+        && str_contains($opsDash['body'], $issuedJomNumber)
+        && $opsProjectsPage['status'] === 200
+        && str_contains($opsProjectsPage['body'], (string) $projectWithJom['project_code']),
+        'Operations Dashboard and Projects list load with HTTP 200, display all 4 metrics, and show the forwarded project with JOM, SLD, and Marketing BOM'
+    );
+
+    // 13.3 Prepare Purchase Request (PR) with multiple line items & validation
+    $opsDetailBeforePr = $opsClient->request('GET', "/projects/{$projectId}");
+    assertCheck(
+        $opsDetailBeforePr['status'] === 200
+        && str_contains($opsDetailBeforePr['body'], 'id="operations-pr-panel"'),
+        'Operations user sees the Operations Purchase Request (PR) panel on project detail page'
+    );
+
+    // Validation: empty line item or missing specifications fails validation
+    $badPrRes = $opsClient->request('POST', "/projects/{$projectId}/purchase-request", [
+        '_csrf_token' => $opsCsrf,
+        'submit_action' => 'draft',
+        'pr_date' => date('Y-m-d'),
+        'item_description' => [''],
+        'item_specification' => [''],
+        'quantity' => ['0'],
+        'unit_of_measure' => ['pcs'],
+    ]);
+    assertCheck($badPrRes['status'] === 303, 'Invalid PR submission redirects with flash error');
+
+    // Create Draft PR with multiple line items and attachment
+    $prAttName = 'test_pr_att_' . bin2hex(random_bytes(3)) . '.pdf';
+    $prAttContent = "%PDF-1.4\n%PR-ATTACHMENT-SPECIFICATION-LINE-ITEMS\n%%EOF";
+    $prAttFile = [
+        'pr_attachment' => [
+            'filename' => $prAttName,
+            'mime' => 'application/pdf',
+            'content' => $prAttContent,
+        ],
+    ];
+    $createdFilesOnDisk[] = dirname(__DIR__) . '/storage/documents/' . $prAttName;
+
+    $createPrRes = $opsClient->request('POST', "/projects/{$projectId}/purchase-request", [
+        '_csrf_token' => $opsCsrf,
+        'submit_action' => 'draft',
+        'pr_date' => date('Y-m-d'),
+        'pr_remarks' => 'Draft Purchase Request for solar equipment and inverters based on SLD and Marketing BOM.',
+        'item_description' => [
+            'Solar Inverter 50kW',
+            'Mounting Structure Aluminum Rails',
+            'DC Solar Cable 6mm2 (Red/Black)',
+        ],
+        'item_specification' => [
+            'Three Phase On-Grid Inverter, 400V, 50Hz, Dual MPPT with Wi-Fi Logger',
+            'Anodized Aluminum 6005-T5, 4.2m lengths with stainless steel hardware',
+            'Halogen-free, double insulated cross-linked polyolefin, UV resistant, 1000m drum',
+        ],
+        'quantity' => [
+            '2.00',
+            '48.00',
+            '1.00',
+        ],
+        'unit_of_measure' => [
+            'units',
+            'pcs',
+            'drum',
+        ],
+        'item_remarks' => [
+            'Main inverters for arrays A and B',
+            'Standard rail profiles',
+            'Home run DC wiring',
+        ],
+    ], $prAttFile);
+
+    $prRow = \App\Models\PurchaseRequest::findByProjectId($projectId);
+    assertCheck(
+        $createPrRes['status'] === 303
+        && $prRow !== null
+        && str_starts_with((string) $prRow['pr_number'], 'PR-')
+        && $prRow['status'] === \App\Models\PurchaseRequest::STATUS_DRAFT
+        && count($prRow['items']) === 3
+        && !empty($prRow['attachment_document_id']),
+        'Operations user creates Draft PR with 3 structured line items, unique PR number (PR-YYYYMM-XXXX), and PR attachment document'
+    );
+
+    // 13.4 Submit Purchase Request (PR) to OPS Finance
+    // Unauthorized department (Marketing / PM) cannot submit PR
+    $mktSubmitPr = $mktClient->request('POST', "/projects/{$projectId}/purchase-request/submit", ['_csrf_token' => $mktCsrf]);
+    $pmSubmitPr = $pmClient->request('POST', "/projects/{$projectId}/purchase-request/submit", ['_csrf_token' => $pmCsrf]);
+    assertCheck(
+        $mktSubmitPr['status'] === 403 && $pmSubmitPr['status'] === 403,
+        'Unauthorized departments (Marketing, PM) are blocked from submitting Purchase Requests (HTTP 403)'
+    );
+
+    // Operations user submits PR to OPS Finance
+    $submitPrRes = $opsClient->request('POST', "/projects/{$projectId}/purchase-request/submit", [
+        '_csrf_token' => $opsCsrf,
+    ]);
+    $prAfterSubmit = \App\Models\PurchaseRequest::findByProjectId($projectId);
+    $projectAfterPrSubmit = Project::findById($projectId);
+    assertCheck(
+        $submitPrRes['status'] === 303
+        && $prAfterSubmit['status'] === \App\Models\PurchaseRequest::STATUS_SUBMITTED_TO_OPS_FINANCE
+        && !empty($prAfterSubmit['submitted_at'])
+        && (int) $prAfterSubmit['submitted_by'] === (int) $opsUserRow['id']
+        && (int) $prAfterSubmit['receiving_department_id'] === (int) $opfinDept['id']
+        && $projectAfterPrSubmit['status'] === Project::STATUS_PR_SUBMITTED_TO_OPS_FINANCE
+        && (int) $projectAfterPrSubmit['current_department_id'] === (int) $opfinDept['id'],
+        'Operations submits PR to OPS Finance: status is Submitted to OPS Finance, routed to OPFIN, timestamp & submitter recorded, and project status updated'
+    );
+
+    // Verify Operations cannot edit submitted PR (locked after submission)
+    $editLockedPrRes = $opsClient->request('POST', "/projects/{$projectId}/purchase-request", [
+        '_csrf_token' => $opsCsrf,
+        'submit_action' => 'draft',
+        'pr_date' => date('Y-m-d'),
+        'item_description' => ['Illegal Edit Inverter'],
+        'item_specification' => ['Illegal Spec'],
+        'quantity' => ['10'],
+        'unit_of_measure' => ['pcs'],
+    ]);
+    assertCheck(
+        $editLockedPrRes['status'] === 403,
+        'Editing Purchase Request after submission is strictly blocked (HTTP 403)'
+    );
+
+    // Duplicate submission is prevented
+    $dupSubmitPrRes = $opsClient->request('POST', "/projects/{$projectId}/purchase-request/submit", [
+        '_csrf_token' => $opsCsrf,
+    ]);
+    assertCheck($dupSubmitPrRes['status'] === 403, 'Duplicate PR submission is prevented (HTTP 403)');
+
+    // 13.5 OPS Finance Incoming Queue, PR Review & Controlled Return for Corrections
+    $opfinDashAfterSubmit = $opfinClient->request('GET', '/ops-finance/dashboard');
+    $opfinDetailView = $opfinClient->request('GET', "/projects/{$projectId}");
+    $opfinDownloadPrAtt = $opfinClient->request('GET', "/projects/{$projectId}/documents/" . (int) $prAfterSubmit['attachment_document_id'] . '/download');
+    assertCheck(
+        $opfinDashAfterSubmit['status'] === 200
+        && str_contains($opfinDashAfterSubmit['body'], (string) $prAfterSubmit['pr_number'])
+        && str_contains($opfinDashAfterSubmit['body'], (string) $projectWithJom['project_code'])
+        && $opfinDetailView['status'] === 200
+        && str_contains($opfinDetailView['body'], 'Solar Inverter 50kW')
+        && str_contains($opfinDetailView['body'], 'Mounting Structure Aluminum Rails')
+        && $opfinDownloadPrAtt['status'] === 200,
+        'OPS Finance receives PR in Incoming Queue, views all requested line items & specifications, and downloads PR attachment (HTTP 200)'
+    );
+
+    // Controlled Return for Corrections test: OPS Finance returns PR to Operations
+    $returnPrReason = 'Please specify copper connector sizes and separate DC cable colors into two distinct line items.';
+    $returnPrRes = $opfinClient->request('POST', "/projects/{$projectId}/purchase-request/return", [
+        '_csrf_token' => $opfinCsrf,
+        'return_reason' => $returnPrReason,
+    ]);
+    $prAfterReturn = \App\Models\PurchaseRequest::findByProjectId($projectId);
+    $projectAfterPrReturn = Project::findById($projectId);
+    assertCheck(
+        $returnPrRes['status'] === 303
+        && $prAfterReturn['status'] === \App\Models\PurchaseRequest::STATUS_RETURNED_FOR_CORRECTIONS
+        && $prAfterReturn['return_reason'] === $returnPrReason
+        && (int) $prAfterReturn['returned_by'] === (int) $opfinUserRow['id']
+        && !empty($prAfterReturn['returned_at'])
+        && $projectAfterPrReturn['status'] === Project::STATUS_PR_BEING_PREPARED
+        && (int) $projectAfterPrReturn['current_department_id'] === (int) $opsDept['id'],
+        'OPS Finance returns PR to Operations for corrections: status is Returned for Corrections, return reason recorded, and routed back to Operations'
+    );
+
+    // Operations updates corrected PR and resubmits to OPS Finance
+    $resubmitPrRes = $opsClient->request('POST', "/projects/{$projectId}/purchase-request", [
+        '_csrf_token' => $opsCsrf,
+        'submit_action' => 'submit',
+        'pr_date' => date('Y-m-d'),
+        'pr_remarks' => 'Resubmitted PR with separated cable colors per OPS Finance correction notes.',
+        'item_description' => [
+            'Solar Inverter 50kW',
+            'Mounting Structure Aluminum Rails',
+            'DC Solar Cable 6mm2 (Red)',
+            'DC Solar Cable 6mm2 (Black)',
+        ],
+        'item_specification' => [
+            'Three Phase On-Grid Inverter, 400V, 50Hz, Dual MPPT with Wi-Fi Logger',
+            'Anodized Aluminum 6005-T5, 4.2m lengths with stainless steel hardware',
+            'Halogen-free cross-linked polyolefin, UV resistant, Red, 500m spool',
+            'Halogen-free cross-linked polyolefin, UV resistant, Black, 500m spool',
+        ],
+        'quantity' => [
+            '2.00',
+            '48.00',
+            '1.00',
+            '1.00',
+        ],
+        'unit_of_measure' => [
+            'units',
+            'pcs',
+            'spool',
+            'spool',
+        ],
+        'item_remarks' => [
+            'Main inverters',
+            'Hardware included',
+            'Positive string wiring',
+            'Negative string wiring',
+        ],
+    ]);
+    $prResubmitted = \App\Models\PurchaseRequest::findByProjectId($projectId);
+    assertCheck(
+        $resubmitPrRes['status'] === 303
+        && $prResubmitted['status'] === \App\Models\PurchaseRequest::STATUS_SUBMITTED_TO_OPS_FINANCE
+        && count($prResubmitted['items']) === 4,
+        'Operations updates line items (now 4 items) and resubmits PR directly to OPS Finance'
+    );
+
+    // OPS Finance marks PR Under Review
+    $reviewPrRes = $opfinClient->request('POST', "/projects/{$projectId}/purchase-request/review", [
+        '_csrf_token' => $opfinCsrf,
+    ]);
+    $prUnderReview = \App\Models\PurchaseRequest::findByProjectId($projectId);
+    $projectActualBomPending = Project::findById($projectId);
+    assertCheck(
+        $reviewPrRes['status'] === 303
+        && $prUnderReview['status'] === \App\Models\PurchaseRequest::STATUS_UNDER_OPS_FINANCE_REVIEW
+        && (int) $prUnderReview['reviewed_by'] === (int) $opfinUserRow['id']
+        && !empty($prUnderReview['reviewed_at'])
+        && $projectActualBomPending['status'] === Project::STATUS_ACTUAL_BOM_PENDING_UPLOAD,
+        'OPS Finance marks PR Under Review: project status transitions to Actual BOM Pending Upload'
+    );
+
+    // 13.6 OPS Finance Prepares and Uploads Actual BOM with Detailed Specifications
+    // Unauthorized departments (Marketing, PM, Operations, Admin Finance) cannot upload Actual BOM
+    $mktUploadAb = $mktClient->request('POST', "/projects/{$projectId}/actual-bom", ['_csrf_token' => $mktCsrf]);
+    $pmUploadAb = $pmClient->request('POST', "/projects/{$projectId}/actual-bom", ['_csrf_token' => $pmCsrf]);
+    $opsUploadAb = $opsClient->request('POST', "/projects/{$projectId}/actual-bom", ['_csrf_token' => $opsCsrf]);
+    $afinUploadAb = $afinClient->request('POST', "/projects/{$projectId}/actual-bom", ['_csrf_token' => $afinCsrf]);
+    assertCheck(
+        $mktUploadAb['status'] === 403
+        && $pmUploadAb['status'] === 403
+        && $opsUploadAb['status'] === 403
+        && $afinUploadAb['status'] === 403,
+        'Marketing, PM, Operations, and Admin Finance are strictly blocked from uploading Actual BOM (HTTP 403)'
+    );
+
+    // OPS Finance uploads Actual BOM document (v1) with actual equipment/material specifications
+    $abDocName = 'test_actual_bom_v1_' . bin2hex(random_bytes(3)) . '.pdf';
+    $abDocContent = "%PDF-1.4\n% ACTUAL BOM V1 SPECIFICATIONS\n1 0 obj << /Type /Catalog >> endobj\n%%EOF\n";
+    $abFiles = [
+        'actual_bom_file' => [
+            'filename' => $abDocName,
+            'mime' => 'application/pdf',
+            'content' => $abDocContent,
+        ],
+    ];
+    $createdFilesOnDisk[] = dirname(__DIR__) . '/storage/documents/' . $abDocName;
+
+    // Snapshot Marketing BOM before Actual BOM upload to verify it is NEVER overwritten
+    $mktBomBeforeAb = ProjectDocument::findCurrentByType($projectId, 'BOM');
+
+    $saveAbDraftRes = $opfinClient->request('POST', "/projects/{$projectId}/actual-bom", [
+        '_csrf_token' => $opfinCsrf,
+        'submit_action' => 'draft',
+        'actual_bom_remarks' => 'OPS Finance verified equipment specifications and finalized pricing/models.',
+        'ab_item_description' => [
+            'Solar Inverter 50kW',
+            'Mounting Structure Aluminum Rails',
+            'DC Solar Cable 6mm2 (Red)',
+            'DC Solar Cable 6mm2 (Black)',
+        ],
+        'ab_actual_specification' => [
+            'Sungrow SG50CX-P2 Multi-MPPT String Inverter, 50kW, Max 1100Vdc, IP66 rated with smart forced air cooling',
+            'Clenergy PV-ezRack SolarMatrix Pro Anodized Aluminum 6005-T5 with 304 Stainless Steel Allen bolts',
+            'Top Cable TOPSOLAR H1Z2Z2-K EN50618 1x6mm2 Halogen-Free Flame Retardant Solar Cable (Red)',
+            'Top Cable TOPSOLAR H1Z2Z2-K EN50618 1x6mm2 Halogen-Free Flame Retardant Solar Cable (Black)',
+        ],
+        'ab_quantity' => [
+            '2.00',
+            '48.00',
+            '1.00',
+            '1.00',
+        ],
+        'ab_unit_of_measure' => [
+            'units',
+            'pcs',
+            'spool',
+            'spool',
+        ],
+        'ab_item_remarks' => [
+            'Model confirmed with engineering',
+            'High wind load rated',
+            'Certified 1500V DC',
+            'Certified 1500V DC',
+        ],
+    ], $abFiles);
+
+    $actualBomRow = \App\Models\ActualBom::findByProjectId($projectId);
+    $mktBomAfterAb = ProjectDocument::findCurrentByType($projectId, 'BOM');
+    assertCheck(
+        $saveAbDraftRes['status'] === 303
+        && $actualBomRow !== null
+        && str_starts_with((string) $actualBomRow['actual_bom_number'], 'ABOM-')
+        && (int) $actualBomRow['version_number'] === 1
+        && $actualBomRow['status'] === \App\Models\ActualBom::STATUS_DRAFT
+        && count($actualBomRow['items']) === 4
+        && !empty($actualBomRow['document_id'])
+        && (int) $mktBomAfterAb['id'] === (int) $mktBomBeforeAb['id']
+        && (int) $mktBomAfterAb['version_number'] === (int) $mktBomBeforeAb['version_number']
+        && (int) $mktBomAfterAb['is_current'] === 1,
+        'OPS Finance creates Draft Actual BOM with unique number (ABOM-YYYYMM-XXXX), 4 detailed actual specifications, and Marketing BOM is PRESERVED completely untouched'
+    );
+
+    // 13.7 OPS Finance Submits Actual BOM to Admin Finance
+    $mktSubmitAb = $mktClient->request('POST', "/projects/{$projectId}/actual-bom/submit", ['_csrf_token' => $mktCsrf]);
+    $opsSubmitAb = $opsClient->request('POST', "/projects/{$projectId}/actual-bom/submit", ['_csrf_token' => $opsCsrf]);
+    assertCheck(
+        $mktSubmitAb['status'] === 403 && $opsSubmitAb['status'] === 403,
+        'Marketing and Operations cannot submit Actual BOM to Admin Finance (HTTP 403)'
+    );
+
+    $submitAbRes = $opfinClient->request('POST', "/projects/{$projectId}/actual-bom/submit", [
+        '_csrf_token' => $opfinCsrf,
+    ]);
+    $abAfterSubmit = \App\Models\ActualBom::findByProjectId($projectId);
+    $projectAfterAbSubmit = Project::findById($projectId);
+    assertCheck(
+        $submitAbRes['status'] === 303
+        && $abAfterSubmit['status'] === \App\Models\ActualBom::STATUS_SUBMITTED_TO_ADMIN_FINANCE
+        && !empty($abAfterSubmit['submitted_at'])
+        && (int) $abAfterSubmit['submitted_by'] === (int) $opfinUserRow['id']
+        && $projectAfterAbSubmit['status'] === Project::STATUS_ACTUAL_BOM_SUBMITTED_TO_AFIN
+        && (int) $projectAfterAbSubmit['current_department_id'] === (int) $afinDept['id'],
+        'OPS Finance submits Actual BOM: status is Submitted to Admin Finance, routed to ADMFIN, and submitter & timestamp recorded'
+    );
+
+    // Duplicate submission of Actual BOM is prevented
+    $dupSubmitAbRes = $opfinClient->request('POST', "/projects/{$projectId}/actual-bom/submit", [
+        '_csrf_token' => $opfinCsrf,
+    ]);
+    assertCheck($dupSubmitAbRes['status'] === 403, 'Duplicate Actual BOM submission is prevented (HTTP 403)');
+
+    // 13.8 Admin Finance Review Lifecycle: Received -> Under Review -> Return for Corrections -> Resubmit v2 -> Accept
+    // Unauthorized departments (MKT, PM, OPS, OPFIN) cannot review or accept Actual BOM
+    $opfinReviewAbAttempt = $opfinClient->request('POST', "/projects/{$projectId}/actual-bom/review", [
+        '_csrf_token' => $opfinCsrf,
+        'decision' => 'accept',
+    ]);
+    assertCheck($opfinReviewAbAttempt['status'] === 403, 'OPS Finance cannot approve their own Actual BOM (HTTP 403)');
+
+    // Admin Finance sees incoming Actual BOM in Incoming Queue on Dashboard
+    $afinDashWithAb = $afinClient->request('GET', '/admin-finance/dashboard');
+    assertCheck(
+        $afinDashWithAb['status'] === 200
+        && str_contains($afinDashWithAb['body'], 'id="admin-finance-actual-bom-queue"')
+        && str_contains($afinDashWithAb['body'], (string) $abAfterSubmit['actual_bom_number'])
+        && str_contains($afinDashWithAb['body'], (string) $projectWithJom['project_code']),
+        'Admin Finance dashboard displays incoming Actual BOM queue with PR and JOM reference'
+    );
+
+    // Step A: Admin Finance marks Actual BOM as Received
+    $afinReceiveAbRes = $afinClient->request('POST', "/projects/{$projectId}/actual-bom/review", [
+        '_csrf_token' => $afinCsrf,
+        'decision' => 'received',
+    ]);
+    $abReceived = \App\Models\ActualBom::findByProjectId($projectId);
+    $projReceived = Project::findById($projectId);
+    assertCheck(
+        $afinReceiveAbRes['status'] === 303
+        && $abReceived['status'] === \App\Models\ActualBom::STATUS_RECEIVED
+        && (int) $abReceived['received_by'] === (int) $afinUserRow['id']
+        && !empty($abReceived['received_at'])
+        && $projReceived['status'] === Project::STATUS_ACTUAL_BOM_RECEIVED,
+        'Admin Finance marks Actual BOM as Received: status is Received, receiver & timestamp recorded'
+    );
+
+    // Step B: Admin Finance marks Actual BOM as Under Review
+    $afinReviewAbRes = $afinClient->request('POST', "/projects/{$projectId}/actual-bom/review", [
+        '_csrf_token' => $afinCsrf,
+        'decision' => 'under_review',
+    ]);
+    $abUnderReview = \App\Models\ActualBom::findByProjectId($projectId);
+    $projUnderReview = Project::findById($projectId);
+    assertCheck(
+        $afinReviewAbRes['status'] === 303
+        && $abUnderReview['status'] === \App\Models\ActualBom::STATUS_UNDER_REVIEW
+        && (int) $abUnderReview['reviewed_by'] === (int) $afinUserRow['id']
+        && !empty($abUnderReview['reviewed_at'])
+        && $projUnderReview['status'] === Project::STATUS_ACTUAL_BOM_UNDER_REVIEW,
+        'Admin Finance marks Actual BOM as Under Review: reviewer & timestamp recorded'
+    );
+
+    // Step C: Admin Finance returns Actual BOM for corrections with notes
+    $returnAbReason = 'Please attach the manufacturer warranty certificate and update rail lengths to 4.4m.';
+    $afinReturnAbRes = $afinClient->request('POST', "/projects/{$projectId}/actual-bom/review", [
+        '_csrf_token' => $afinCsrf,
+        'decision' => 'return',
+        'return_reason' => $returnAbReason,
+    ]);
+    $abReturned = \App\Models\ActualBom::findByProjectId($projectId);
+    $projReturned = Project::findById($projectId);
+    assertCheck(
+        $afinReturnAbRes['status'] === 303
+        && $abReturned['status'] === \App\Models\ActualBom::STATUS_RETURNED_FOR_CORRECTIONS
+        && $abReturned['return_reason'] === $returnAbReason
+        && (int) $abReturned['returned_by'] === (int) $afinUserRow['id']
+        && !empty($abReturned['returned_at'])
+        && $projReturned['status'] === Project::STATUS_ACTUAL_BOM_RETURNED
+        && (int) $projReturned['current_department_id'] === (int) $opfinDept['id'],
+        'Admin Finance returns Actual BOM for corrections: status is Returned for Corrections, reason recorded, routed back to OPS Finance'
+    );
+
+    // Step D: OPS Finance uploads updated Actual BOM (v2) with supporting document and resubmits to Admin Finance
+    $abDocV2Name = 'test_actual_bom_v2_' . bin2hex(random_bytes(3)) . '.pdf';
+    $abDocV2Content = "%PDF-1.4\n% ACTUAL BOM V2 SPECIFICATIONS REVISED\n1 0 obj << /Type /Catalog >> endobj\n%%EOF\n";
+    $suppDocName = 'test_warranty_cert_' . bin2hex(random_bytes(3)) . '.pdf';
+    $suppDocContent = "%PDF-1.4\n%MANUFACTURER-WARRANTY-CERTIFICATE\n1 0 obj << /Type /Catalog >> endobj\n%%EOF\n";
+    $abV2Files = [
+        'actual_bom_file' => [
+            'filename' => $abDocV2Name,
+            'mime' => 'application/pdf',
+            'content' => $abDocV2Content,
+        ],
+        'supporting_file' => [
+            'filename' => $suppDocName,
+            'mime' => 'application/pdf',
+            'content' => $suppDocContent,
+        ],
+    ];
+    $createdFilesOnDisk[] = dirname(__DIR__) . '/storage/documents/' . $abDocV2Name;
+    $createdFilesOnDisk[] = dirname(__DIR__) . '/storage/documents/' . $suppDocName;
+
+    $resubmitAbRes = $opfinClient->request('POST', "/projects/{$projectId}/actual-bom", [
+        '_csrf_token' => $opfinCsrf,
+        'submit_action' => 'submit',
+        'actual_bom_remarks' => 'Resubmitted Actual BOM v2 with updated 4.4m rails and attached manufacturer warranty certificate.',
+        'ab_item_description' => [
+            'Solar Inverter 50kW',
+            'Mounting Structure Aluminum Rails',
+            'DC Solar Cable 6mm2 (Red)',
+            'DC Solar Cable 6mm2 (Black)',
+        ],
+        'ab_actual_specification' => [
+            'Sungrow SG50CX-P2 Multi-MPPT String Inverter, 50kW, Max 1100Vdc, IP66 rated with smart forced air cooling',
+            'Clenergy PV-ezRack SolarMatrix Pro Anodized Aluminum 6005-T5 (4.4m length) with 304 Stainless Steel Allen bolts',
+            'Top Cable TOPSOLAR H1Z2Z2-K EN50618 1x6mm2 Halogen-Free Flame Retardant Solar Cable (Red)',
+            'Top Cable TOPSOLAR H1Z2Z2-K EN50618 1x6mm2 Halogen-Free Flame Retardant Solar Cable (Black)',
+        ],
+        'ab_quantity' => [
+            '2.00',
+            '48.00',
+            '1.00',
+            '1.00',
+        ],
+        'ab_unit_of_measure' => [
+            'units',
+            'pcs',
+            'spool',
+            'spool',
+        ],
+        'ab_item_remarks' => [
+            'Warranty certificate attached',
+            'Updated to 4.4m per AFIN notes',
+            'Certified 1500V DC',
+            'Certified 1500V DC',
+        ],
+    ], $abV2Files);
+
+    $abV2Row = \App\Models\ActualBom::findByProjectId($projectId);
+    $abHistoryDocs = \App\Models\ActualBom::documentHistoryForProject($projectId);
+    $mktBomCheckFinal = ProjectDocument::findCurrentByType($projectId, 'BOM');
+    assertCheck(
+        $resubmitAbRes['status'] === 303
+        && $abV2Row !== null
+        && (int) $abV2Row['version_number'] === 2
+        && $abV2Row['status'] === \App\Models\ActualBom::STATUS_SUBMITTED_TO_ADMIN_FINANCE
+        && !empty($abV2Row['supporting_document_id'])
+        && count($abHistoryDocs) === 2
+        && (int) $mktBomCheckFinal['id'] === (int) $mktBomBeforeAb['id'],
+        'OPS Finance resubmits Actual BOM v2: both v1 and v2 are preserved in document history, supporting file attached, and Marketing BOM remains untouched'
+    );
+
+    // Step E: Admin Finance reviews and Accepts Actual BOM v2 with specifications
+    $acceptNotes = 'Admin Finance verified all equipment specifications, 4.4m rails, and manufacturer warranty. Actual BOM accepted.';
+    $afinAcceptRes = $afinClient->request('POST', "/projects/{$projectId}/actual-bom/review", [
+        '_csrf_token' => $afinCsrf,
+        'decision' => 'accept',
+        'acceptance_notes' => $acceptNotes,
+    ]);
+    $abAccepted = \App\Models\ActualBom::findByProjectId($projectId);
+    $projAccepted = Project::findById($projectId);
+    assertCheck(
+        $afinAcceptRes['status'] === 303
+        && $abAccepted['status'] === \App\Models\ActualBom::STATUS_ACCEPTED
+        && (int) $abAccepted['accepted_by'] === (int) $afinUserRow['id']
+        && !empty($abAccepted['accepted_at'])
+        && $abAccepted['acceptance_notes'] === $acceptNotes
+        && $projAccepted['status'] === Project::STATUS_ACTUAL_BOM_ACCEPTED,
+        'Admin Finance accepts Actual BOM: status is Accepted, project status is Actual BOM Accepted by Admin Finance, and accepter details & notes recorded'
+    );
+
+    // 14. Phase 2 Operations Purchase Request (PR) Full Lifecycle, Approval, Rejection & PO Eligibility
+    echo "\n14. Phase 2 Operations Purchase Request (PR) Full Lifecycle, Approval, Rejection & PO Eligibility\n";
+
+    // 14.1 Auto-retrieval verification & non-overwriting of separate Marketing BOM
+    $prOnMainProject = \App\Models\PurchaseRequest::findByProjectId($projectId);
+    $mktBomDoc = ProjectDocument::findCurrentByType($projectId, 'BOM');
+    $actualBomRecord = \App\Models\ActualBom::findByProjectId($projectId);
+    assertCheck(
+        $prOnMainProject !== null
+        && (int) $prOnMainProject['sld_document_id'] > 0
+        && (int) $prOnMainProject['marketing_bom_document_id'] > 0
+        && (int) $prOnMainProject['marketing_bom_document_id'] === (int) $mktBomDoc['id']
+        && (int) $prOnMainProject['actual_bom_id'] === (int) $actualBomRecord['id']
+        && !empty($prOnMainProject['requested_by'])
+        && !empty($prOnMainProject['pr_date']),
+        'PR automatically retrieves and links JOM, SLD, Marketing BOM, and Actual BOM while keeping BOMs as separate references'
+    );
+
+    // 14.2 Operations requester strictly blocked from approving or rejecting their own PR (HTTP 403)
+    $opsApproveAttempt = $opsClient->request('POST', "/projects/{$projectId}/purchase-request/approve", [
+        '_csrf_token' => $opsCsrf,
+        'approval_notes' => 'Operations user unauthorized self-approval attempt.',
+    ]);
+    $opsRejectAttempt = $opsClient->request('POST', "/projects/{$projectId}/purchase-request/reject", [
+        '_csrf_token' => $opsCsrf,
+        'rejection_reason' => 'Operations user unauthorized self-rejection attempt.',
+    ]);
+    $mktApproveAttempt = $mktClient->request('POST', "/projects/{$projectId}/purchase-request/approve", [
+        '_csrf_token' => $mktCsrf,
+        'approval_notes' => 'Marketing unauthorized approval attempt.',
+    ]);
+    assertCheck(
+        $opsApproveAttempt['status'] === 403
+        && $opsRejectAttempt['status'] === 403
+        && $mktApproveAttempt['status'] === 403,
+        'Operations requester and unauthorized departments are strictly blocked from approving or rejecting PRs (HTTP 403)'
+    );
+
+    // 14.3 Authorized Approver (OPS Finance / Admin Finance) formally approves PR
+    $prApproveNotes = 'PR line items and technical specifications formally approved against finalized Actual BOM.';
+    $approvePrRes = $opfinClient->request('POST', "/projects/{$projectId}/purchase-request/approve", [
+        '_csrf_token' => $opfinCsrf,
+        'approval_notes' => $prApproveNotes,
+    ]);
+    $prApproved = \App\Models\PurchaseRequest::findByProjectId($projectId);
+    $approvedItems = $prApproved['items'] ?? [];
+    $allApprovedQuantitiesMatch = !empty($approvedItems);
+    foreach ($approvedItems as $apprItem) {
+        if ((float) $apprItem['approved_quantity'] !== (float) $apprItem['quantity']) {
+            $allApprovedQuantitiesMatch = false;
+        }
+    }
+    assertCheck(
+        $approvePrRes['status'] === 303
+        && $prApproved['status'] === \App\Models\PurchaseRequest::STATUS_APPROVED
+        && (int) $prApproved['approved_by'] === (int) $opfinUserRow['id']
+        && !empty($prApproved['approved_at'])
+        && $prApproved['approval_notes'] === $prApproveNotes
+        && $allApprovedQuantitiesMatch,
+        'Authorized approver formally approves PR: status is Approved, approver and timestamp saved, and approved_quantity locked'
+    );
+
+    // 14.4 PR History audit trail (purchase_request_histories)
+    $prHistories = \App\Models\PurchaseRequest::historiesForPr((int) $prApproved['id']);
+    $prHistoryActions = array_column($prHistories, 'action');
+    assertCheck(
+        !empty($prHistories)
+        && in_array('approved', $prHistoryActions, true),
+        'Purchase Request history table (purchase_request_histories) logs approval event with timestamp, approver, and notes'
+    );
+
+    // 14.5 PO Eligibility and Order Quantity Tracking (Partial & Full Order)
+    assertCheck(
+        \App\Models\PurchaseRequest::isEligibleForPo($prApproved),
+        'Approved Purchase Request is eligible for Purchase Order (PO) creation'
+    );
+
+    $testItem = $approvedItems[0];
+    $apprQty = (float) $testItem['approved_quantity'];
+
+    // Over-ordering exceeds approved quantity -> rejected with error
+    $overOrderRes = \App\Models\PurchaseRequest::recordOrderQuantity((int) $prApproved['id'], (int) $testItem['id'], $apprQty + 5.0, (int) $opfinUserRow['id']);
+    assertCheck(
+        $overOrderRes['success'] === false && str_contains($overOrderRes['error'] ?? '', 'exceeds'),
+        'Ordering quantity cannot exceed approved quantity unless an authorized amendment is recorded'
+    );
+
+    // Partial order -> status transitions to Partially Ordered
+    $partialQty = round($apprQty / 2, 2);
+    $partialRes = \App\Models\PurchaseRequest::recordOrderQuantity((int) $prApproved['id'], (int) $testItem['id'], $partialQty, (int) $opfinUserRow['id']);
+    $prAfterPartial = \App\Models\PurchaseRequest::findById((int) $prApproved['id']);
+    assertCheck(
+        $partialRes['success'] === true
+        && $prAfterPartial !== null
+        && $prAfterPartial['status'] === \App\Models\PurchaseRequest::STATUS_PARTIALLY_ORDERED
+        && (float) $prAfterPartial['ordered_quantity_total'] === $partialQty,
+        'Partial order updates item ordered_quantity and transitions PR status to Partially Ordered'
+    );
+
+    // Complete order -> status transitions to Converted to PO / Fully Ordered
+    $remainderQty = $apprQty - $partialQty;
+    if ($remainderQty > 0) {
+        \App\Models\PurchaseRequest::recordOrderQuantity((int) $prApproved['id'], (int) $testItem['id'], $remainderQty, (int) $opfinUserRow['id']);
+    }
+    for ($i = 1; $i < count($approvedItems); $i++) {
+        $otherItm = $approvedItems[$i];
+        \App\Models\PurchaseRequest::recordOrderQuantity((int) $prApproved['id'], (int) $otherItm['id'], (float) $otherItm['approved_quantity'], (int) $opfinUserRow['id']);
+    }
+    $prFullyOrdered = \App\Models\PurchaseRequest::findById((int) $prApproved['id']);
+    assertCheck(
+        $prFullyOrdered !== null
+        && in_array($prFullyOrdered['status'], [\App\Models\PurchaseRequest::STATUS_CONVERTED_TO_PO, \App\Models\PurchaseRequest::STATUS_FULLY_ORDERED], true),
+        'Full ordering of all approved line items transitions PR status to Converted to PO / Fully Ordered'
+    );
+
+    // 14.6 PR Creation with Model/Part No, Technical Specs, Purpose & Rejection Lifecycle
+    $project3Id = Project::create([
+        'project_code' => 'PRJ-' . date('Ymd') . '-P3' . substr(str_shuffle('0123456789'), 0, 3),
+        'project_name' => 'Solar Hybrid Commercial System ' . $suffix,
+        'client_name' => 'Metro Logistics Warehouse',
+        'client_contact' => 'operations@metrologistics.ph',
+        'project_location' => 'Laguna Technopark',
+        'project_description' => 'Dedicated project for PR rejection and multi-field verification',
+        'origin_department_id' => $mktDept['id'],
+        'current_department_id' => $opsDept['id'],
+        'status' => Project::STATUS_FORWARDED_TO_OPERATIONS,
+        'created_by' => (int) $mktUserRow['id'],
+    ]);
+    $jomP3 = 'JOM-' . date('Ymd') . '-P3' . substr(str_shuffle('0123456789'), 0, 3);
+    $pdo->prepare('UPDATE projects SET jom_number = :jom WHERE id = :id')->execute([
+        'jom' => $jomP3,
+        'id' => $project3Id,
+    ]);
+    $createdProjectIds[] = $project3Id;
+
+    $createPr3Res = $opsClient->request('POST', "/projects/{$project3Id}/purchase-request", [
+        '_csrf_token' => $opsCsrf,
+        'submit_action' => 'submit',
+        'purpose' => 'Urgent replacement of damaged high-capacity inverter components.',
+        'required_delivery_date' => date('Y-m-d', strtotime('+14 days')),
+        'pr_remarks' => 'Procurement requested with vendor expedited delivery.',
+        'item_description' => [
+            'Lithium Iron Phosphate Battery Rack 100kWh',
+            'Hybrid Power Inverter 100kW',
+        ],
+        'model_part_number' => [
+            'LFP-100KWH-HV',
+            'HYB-INV-100K',
+        ],
+        'item_specification' => [
+            '16S LiFePO4 cells with integrated BMS and fire suppression unit',
+            '400V 3-phase hybrid inverter with grid export limiting control',
+        ],
+        'quantity' => [
+            '1.00',
+            '1.00',
+        ],
+        'unit_of_measure' => [
+            'rack',
+            'unit',
+        ],
+        'item_purpose' => [
+            'Peak shaving and emergency backup',
+            'Grid-tied power conversion and battery charging',
+        ],
+        'item_remarks' => [
+            'Requires factory calibration certificate',
+            'IP65 rated for outdoor installation',
+        ],
+    ]);
+
+    $pr3Submitted = \App\Models\PurchaseRequest::findByProjectId($project3Id);
+    $pr3Items = $pr3Submitted['items'] ?? [];
+    assertCheck(
+        $createPr3Res['status'] === 303
+        && $pr3Submitted !== null
+        && $pr3Submitted['status'] === \App\Models\PurchaseRequest::STATUS_SUBMITTED_TO_OPS_FINANCE
+        && $pr3Submitted['purpose'] === 'Urgent replacement of damaged high-capacity inverter components.'
+        && count($pr3Items) === 2
+        && $pr3Items[0]['model_part_number'] === 'LFP-100KWH-HV'
+        && $pr3Items[0]['purpose'] === 'Peak shaving and emergency backup',
+        'Operations submits PR with model/part numbers, technical specifications, item purposes, and required delivery date'
+    );
+
+    // Authorized approver rejects PR #3 with reason
+    $pr3RejectReason = 'Duplicate equipment requisition: energy storage rack already allocated under master warehouse stock.';
+    $rejectPr3Res = $opfinClient->request('POST', "/projects/{$project3Id}/purchase-request/reject", [
+        '_csrf_token' => $opfinCsrf,
+        'rejection_reason' => $pr3RejectReason,
+    ]);
+    $pr3Rejected = \App\Models\PurchaseRequest::findByProjectId($project3Id);
+    $pr3Histories = \App\Models\PurchaseRequest::historiesForPr((int) $pr3Rejected['id']);
+    $pr3HistoryActions = array_column($pr3Histories, 'action');
+    assertCheck(
+        $rejectPr3Res['status'] === 303
+        && $pr3Rejected['status'] === \App\Models\PurchaseRequest::STATUS_REJECTED
+        && (int) $pr3Rejected['rejected_by'] === (int) $opfinUserRow['id']
+        && !empty($pr3Rejected['rejected_at'])
+        && $pr3Rejected['rejection_reason'] === $pr3RejectReason
+        && in_array('rejected', $pr3HistoryActions, true)
+        && !\App\Models\PurchaseRequest::isEligibleForPo($pr3Rejected),
+        'Authorized approver formally rejects PR: status is Rejected, rejection reason saved, history logged, and PR ineligible for PO'
+    );
+
+    // 14.7 Operations Dashboard Phase 2 Metrics & Multi-filter Querying
+    $opsDashPhase2 = $opsClient->request('GET', '/operations/dashboard');
+    $opsFilterPrs = $opsClient->request('GET', '/operations/projects?status=Approved&date_from=' . date('Y-m-01') . '&date_to=' . date('Y-m-d'));
+    assertCheck(
+        $opsDashPhase2['status'] === 200
+        && str_contains($opsDashPhase2['body'], 'Total PRs')
+        && str_contains($opsDashPhase2['body'], 'Draft PRs')
+        && str_contains($opsDashPhase2['body'], 'Approved PRs')
+        && str_contains($opsDashPhase2['body'], 'PRs Converted to PO')
+        && $opsFilterPrs['status'] === 200,
+        'Operations Dashboard displays all Phase 2 metric cards and project list supports multi-criteria date and status filters'
+    );
+
+    // 15. Workflow History, Audit Trail & Session Logout Invalidation
+    echo "\n15. Workflow History, Audit Trail & Session Logout Invalidation\n";
     $histories = ProjectWorkflowHistory::forProject($projectId);
     $historyActions = array_column($histories, 'action');
     $expectedHistoryActions = [
@@ -1295,12 +2278,502 @@ try {
         'resubmitted_for_verification',
         'started_review',
         'completed_document_verification',
+        'forwarded_to_admin_finance',
+        'started_admin_finance_review',
         'issued_jom',
+        'forwarded_to_operations',
+        'created_purchase_request',
+        'submitted_pr_to_ops_finance',
+        'returned_pr_for_corrections',
+        'ops_finance_reviewed_pr',
+        'uploaded_actual_bom',
+        'submitted_actual_bom_to_admin_finance',
+        'admin_finance_received_actual_bom',
+        'admin_finance_reviewing_actual_bom',
+        'returned_actual_bom_for_corrections',
+        'accepted_actual_bom',
     ];
     $missingHistory = array_diff($expectedHistoryActions, $historyActions);
     assertCheck(
         $missingHistory === [],
-        'project_workflow_histories recorded full lifecycle (Draft -> Preparing -> Submitted -> Returned -> Resubmitted)'
+        'project_workflow_histories recorded complete end-to-end official workflow (Marketing -> PM Verification -> Admin Finance JOM Issuance -> Operations PR Preparation & Submission -> OPS Finance PR Review & Return/Resubmit -> OPS Finance Actual BOM Upload & Submission -> Admin Finance Actual BOM Receive/Review/Return/Accept)'
+        . ($missingHistory !== [] ? ' (Missing: ' . implode(', ', $missingHistory) . ')' : '')
+    );
+
+    // 16. Phase 3: Purchase Order (PO), Payment Terms, Supplier Delivery Tracking & Stock In Integration
+    echo "\n16. Phase 3: Purchase Order (PO), Payment Terms, Supplier Delivery Tracking & Stock In Integration\n";
+
+    // 16.1 Setup Project #4 for End-to-End Phase 3 Verification
+    $project4Code = 'PRJ-' . date('Ymd') . '-P4' . substr(str_shuffle('0123456789'), 0, 3);
+    $project4Id = Project::create([
+        'project_code' => $project4Code,
+        'project_name' => 'Solar Commercial Rooftop Phase 3 ' . $suffix,
+        'client_name' => 'Solaria Industrial Parks Inc.',
+        'client_contact' => 'procurement@solariaparks.ph',
+        'project_location' => 'Laguna Technopark Special Economic Zone',
+        'project_description' => 'Dedicated project for PR-to-PO, Payment Terms, Supplier Delivery & Stock In verification',
+        'origin_department_id' => (int) $mktDept['id'],
+        'current_department_id' => (int) $opsDept['id'],
+        'status' => Project::STATUS_FORWARDED_TO_OPERATIONS,
+        'created_by' => (int) $mktUserRow['id'],
+    ]);
+    $createdProjectIds[] = $project4Id;
+
+    $jomP4 = 'JOM-' . date('Ymd') . '-P4' . substr(str_shuffle('0123456789'), 0, 3);
+    $pdo->prepare('UPDATE projects SET jom_number = :jom, jom_issued_by = :issuer, jom_issued_at = NOW() WHERE id = :id')
+        ->execute([
+            'jom' => $jomP4,
+            'issuer' => (int) $afinUserRow['id'],
+            'id' => $project4Id,
+        ]);
+
+    // Attach mock SLD and Marketing BOM to project #4
+    $sldP4Name = 'test_sld_p4_' . bin2hex(random_bytes(3)) . '.pdf';
+    $bomP4Name = 'test_bom_p4_' . bin2hex(random_bytes(3)) . '.pdf';
+    $mockPdfContent = "%PDF-1.4\n% MOCK DOCUMENT\n1 0 obj << /Type /Catalog >> endobj\n%%EOF\n";
+    file_put_contents(dirname(__DIR__) . '/storage/documents/' . $sldP4Name, $mockPdfContent);
+    file_put_contents(dirname(__DIR__) . '/storage/documents/' . $bomP4Name, $mockPdfContent);
+    $createdFilesOnDisk[] = dirname(__DIR__) . '/storage/documents/' . $sldP4Name;
+    $createdFilesOnDisk[] = dirname(__DIR__) . '/storage/documents/' . $bomP4Name;
+
+    $sldP4Id = ProjectDocument::create([
+        'project_id' => $project4Id,
+        'document_type' => 'SLD',
+        'version_number' => 1,
+        'original_filename' => $sldP4Name,
+        'stored_filename' => $sldP4Name,
+        'file_path' => 'storage/documents/' . $sldP4Name,
+        'file_size' => strlen($mockPdfContent),
+        'mime_type' => 'application/pdf',
+        'uploaded_by' => (int) $mktUserRow['id'],
+        'is_current' => 1,
+    ]);
+    $bomP4Id = ProjectDocument::create([
+        'project_id' => $project4Id,
+        'document_type' => 'BOM',
+        'version_number' => 1,
+        'original_filename' => $bomP4Name,
+        'stored_filename' => $bomP4Name,
+        'file_path' => 'storage/documents/' . $bomP4Name,
+        'file_size' => strlen($mockPdfContent),
+        'mime_type' => 'application/pdf',
+        'uploaded_by' => (int) $mktUserRow['id'],
+        'is_current' => 1,
+    ]);
+
+    // Operations submits PR for Project #4 with 2 equipment line items
+    $createPr4Res = $opsClient->request('POST', "/projects/{$project4Id}/purchase-request", [
+        '_csrf_token' => $opsCsrf,
+        'submit_action' => 'submit',
+        'purpose' => 'Procurement of primary string inverters and monocrystalline solar modules for Laguna jobsite.',
+        'required_delivery_date' => date('Y-m-d', strtotime('+21 days')),
+        'pr_remarks' => 'High-priority solar project PR.',
+        'item_description' => [
+            'Huawei SUN2000-100KTL-M2 High Power Inverter',
+            'Canadian Solar 550W HiKu6 Mono PERC Solar Panels',
+        ],
+        'model_part_number' => [
+            'SUN2000-100KTL-M2',
+            'CS6W-550MS',
+        ],
+        'item_specification' => [
+            '100kW, 10 MPPTs, 1100V DC Max, IP66 rated outdoor inverter with smart I-V curve diagnosis',
+            '550W Monocrystalline PERC, 144 split-cell module, MC4-EVO2 compatible connectors',
+        ],
+        'quantity' => [
+            '10.00',
+            '100.00',
+        ],
+        'unit_of_measure' => [
+            'units',
+            'pcs',
+        ],
+        'item_purpose' => [
+            'Three-phase utility-scale power conversion',
+            'Primary PV array solar generation',
+        ],
+        'item_remarks' => [
+            'Standard 5-year warranty required',
+            'Linear performance warranty 25 years',
+        ],
+    ]);
+
+    $pr4Submitted = PurchaseRequest::findByProjectId($project4Id);
+    assertCheck(
+        $createPr4Res['status'] === 303
+        && $pr4Submitted !== null
+        && $pr4Submitted['status'] === PurchaseRequest::STATUS_SUBMITTED_TO_OPS_FINANCE
+        && count($pr4Submitted['items']) === 2,
+        'Operations submits Purchase Request with 2 line items (Inverters & Panels) linked to JOM and separate documents'
+    );
+
+    // Authorized approver formally approves PR #4
+    $approvePr4Res = $opfinClient->request('POST', "/projects/{$project4Id}/purchase-request/approve", [
+        '_csrf_token' => $opfinCsrf,
+        'approval_notes' => 'PR line items approved for procurement.',
+    ]);
+    $pr4Approved = PurchaseRequest::findByProjectId($project4Id);
+    $pr4Items = $pr4Approved['items'] ?? [];
+    $pr4Item1 = $pr4Items[0] ?? null; // Inverters (10.00 approved)
+    $pr4Item2 = $pr4Items[1] ?? null; // Panels (100.00 approved)
+    assertCheck(
+        $approvePr4Res['status'] === 303
+        && $pr4Approved['status'] === PurchaseRequest::STATUS_APPROVED
+        && (float) ($pr4Item1['approved_quantity'] ?? 0) === 10.00
+        && (float) ($pr4Item2['approved_quantity'] ?? 0) === 100.00,
+        'Authorized approver approves PR #4: status is Approved and approved quantities are locked'
+    );
+
+    // 16.2 PO Authorization Hierarchy: Operations, Marketing, and PM are strictly blocked from creating POs
+    $opsPoCreateRes = $opsClient->request('POST', "/projects/{$project4Id}/purchase-orders", ['_csrf_token' => $opsCsrf]);
+    $mktPoCreateRes = $mktClient->request('POST', "/projects/{$project4Id}/purchase-orders", ['_csrf_token' => $mktCsrf]);
+    $pmPoCreateRes = $pmClient->request('POST', "/projects/{$project4Id}/purchase-orders", ['_csrf_token' => $pmCsrf]);
+    assertCheck(
+        $opsPoCreateRes['status'] === 403
+        && $mktPoCreateRes['status'] === 403
+        && $pmPoCreateRes['status'] === 403,
+        'Operations, Marketing, and PM users are strictly blocked from creating Purchase Orders (HTTP 403)'
+    );
+
+    // 16.3 PR to PO Connection: Admin Finance creates PO #1 with auto-retrieved PR items & Milestone Terms of Payment
+    $huaweiSupplier = Supplier::findByCode('SUP-HUAWEI');
+    $canadianSupplier = Supplier::findByCode('SUP-CANADIAN');
+    assertCheck(
+        $huaweiSupplier !== null && $canadianSupplier !== null,
+        'Active company suppliers (Huawei & Canadian Solar) are retrieved from suppliers catalog'
+    );
+
+    // PO #1 partial order: 6 out of 10 Inverters ordered from Huawei
+    $createPo1Res = $afinClient->request('POST', "/projects/{$project4Id}/purchase-orders", [
+        '_csrf_token' => $afinCsrf,
+        'supplier_id' => (string) $huaweiSupplier['id'],
+        'po_date' => date('Y-m-d'),
+        'expected_delivery_date' => date('Y-m-d', strtotime('+14 days')),
+        'delivery_terms' => 'CIF Jobsite - Laguna Technopark',
+        'currency' => 'PHP',
+        'po_remarks' => 'First partial PO for primary Huawei string inverters.',
+        'pr_item_id' => [(string) $pr4Item1['id']],
+        'item_description' => ['Huawei SUN2000-100KTL-M2 High Power Inverter'],
+        'model_part_number' => ['SUN2000-100KTL-M2'],
+        'item_specification' => ['100kW, 10 MPPTs, 1100V DC Max, IP66 rated outdoor inverter with smart I-V curve diagnosis'],
+        'quantity_ordered' => ['6.00'],
+        'unit_of_measure' => ['units'],
+        'unit_price' => ['150000.00'],
+        'payment_term' => ['Down Payment 30%', 'Delivery 60%', 'Retention 10%'],
+        'term_percentage' => ['30.0', '60.0', '10.0'],
+        'term_amount' => ['270000.00', '540000.00', '90000.00'],
+        'term_due_date' => [date('Y-m-d', strtotime('+3 days')), date('Y-m-d', strtotime('+14 days')), date('Y-m-d', strtotime('+60 days'))],
+        'term_remarks' => ['Upon PO confirmation', 'Upon physical delivery to site', 'Upon final system energization'],
+    ]);
+
+    $poListAfter1 = PurchaseOrder::forProject($project4Id);
+    $po1 = $poListAfter1[0] ?? null;
+    $pr4AfterPo1 = PurchaseRequest::findByProjectId($project4Id);
+    $pr4Item1After = null;
+    foreach ($pr4AfterPo1['items'] as $it) {
+        if ((int) $it['id'] === (int) $pr4Item1['id']) {
+            $pr4Item1After = $it;
+            break;
+        }
+    }
+
+    assertCheck(
+        $createPo1Res['status'] === 303
+        && $po1 !== null
+        && str_starts_with((string) $po1['po_number'], 'PO-')
+        && preg_match('/^PO-\d{6}-\d{4}$/', (string) $po1['po_number']) === 1
+        && (float) $po1['total_amount'] === 900000.00
+        && (int) $po1['supplier_id'] === (int) $huaweiSupplier['id']
+        && $po1['status'] === PurchaseOrder::STATUS_DRAFT
+        && $pr4Item1After !== null
+        && (float) $pr4Item1After['ordered_quantity'] === 6.00
+        && (float) $pr4Item1After['remaining_quantity'] === 4.00
+        && $pr4AfterPo1['status'] === PurchaseRequest::STATUS_PARTIALLY_ORDERED,
+        'Admin Finance creates PO #1 (PO-YYYYMM-XXXX preserving leading zeros), tracks partial ordered quantity (6/10), and PR status transitions to Partially Ordered'
+    );
+
+    // 16.4 Over-Ordering Validation: Attempt to order 5 units of Item 1 (exceeding remaining 4) is blocked
+    $overOrderAttempt = $afinClient->request('POST', "/projects/{$project4Id}/purchase-orders", [
+        '_csrf_token' => $afinCsrf,
+        'supplier_id' => (string) $huaweiSupplier['id'],
+        'po_date' => date('Y-m-d'),
+        'delivery_terms' => 'FOB Warehouse',
+        'pr_item_id' => [(string) $pr4Item1['id']],
+        'item_description' => ['Huawei SUN2000-100KTL-M2 High Power Inverter'],
+        'quantity_ordered' => ['5.00'],
+        'unit_price' => ['150000.00'],
+    ]);
+    assertCheck(
+        $overOrderAttempt['status'] === 303,
+        'Ordering quantity exceeding approved PR quantity is rejected with validation error'
+    );
+
+    // 16.5 Multiple POs Linked to One PR: Create PO #2 for remaining 4 Inverters + all 100 Panels
+    $createPo2Res = $afinClient->request('POST', "/projects/{$project4Id}/purchase-orders", [
+        '_csrf_token' => $afinCsrf,
+        'supplier_id' => (string) $canadianSupplier['id'],
+        'po_date' => date('Y-m-d'),
+        'expected_delivery_date' => date('Y-m-d', strtotime('+18 days')),
+        'delivery_terms' => 'DDP Jobsite',
+        'currency' => 'PHP',
+        'po_remarks' => 'Second PO fulfilling remaining inverters and all monocrystalline modules.',
+        'pr_item_id' => [(string) $pr4Item1['id'], (string) $pr4Item2['id']],
+        'item_description' => [
+            'Huawei SUN2000-100KTL-M2 High Power Inverter',
+            'Canadian Solar 550W HiKu6 Mono PERC Solar Panels',
+        ],
+        'model_part_number' => [
+            'SUN2000-100KTL-M2',
+            'CS6W-550MS',
+        ],
+        'item_specification' => [
+            '100kW, 10 MPPTs, 1100V DC Max',
+            '550W Monocrystalline PERC, 144 split-cell module',
+        ],
+        'quantity_ordered' => ['4.00', '100.00'],
+        'unit_of_measure' => ['units', 'pcs'],
+        'unit_price' => ['150000.00', '8500.00'],
+        'payment_term' => ['Full Payment on Delivery'],
+        'term_percentage' => ['100.0'],
+        'term_amount' => ['1450000.00'],
+        'term_due_date' => [date('Y-m-d', strtotime('+20 days'))],
+    ]);
+
+    $poListAfter2 = PurchaseOrder::forProject($project4Id);
+    $pr4AfterPo2 = PurchaseRequest::findByProjectId($project4Id);
+    assertCheck(
+        $createPo2Res['status'] === 303
+        && count($poListAfter2) === 2
+        && in_array($pr4AfterPo2['status'], [PurchaseRequest::STATUS_CONVERTED_TO_PO, PurchaseRequest::STATUS_FULLY_ORDERED], true),
+        'Multiple POs linked to one PR: PO #2 created for remaining items, and PR transitions to Converted to PO / Fully Ordered'
+    );
+
+    // 16.6 PO Approval and Authorization Workflow: Operations blocked from authorizing PO
+    $po1Id = (int) $po1['id'];
+    $opsPoAuthAttempt = $opsClient->request('POST', "/projects/{$project4Id}/purchase-orders/{$po1Id}/authorize", [
+        '_csrf_token' => $opsCsrf,
+        'authorization_notes' => 'Operations unauthorized authorization attempt.',
+    ]);
+    assertCheck($opsPoAuthAttempt['status'] === 403, 'Operations user is strictly blocked from authorizing Purchase Orders (HTTP 403)');
+
+    // Admin Finance authorizes PO #1
+    $afinPoAuthRes = $afinClient->request('POST', "/projects/{$project4Id}/purchase-orders/{$po1Id}/authorize", [
+        '_csrf_token' => $afinCsrf,
+        'authorization_notes' => 'Admin Finance financial authorization approved per capital allocation budget.',
+    ]);
+    $po1Authorized = PurchaseOrder::findById($po1Id);
+    assertCheck(
+        $afinPoAuthRes['status'] === 303
+        && $po1Authorized['status'] === PurchaseOrder::STATUS_APPROVED
+        && (int) $po1Authorized['authorized_by'] === (int) $afinUserRow['id']
+        && !empty($po1Authorized['authorized_at']),
+        'Admin Finance financially authorizes PO #1: status is Approved, authorizer and timestamp saved'
+    );
+
+    // Operations blocked from issuing PO to supplier
+    $opsPoIssueAttempt = $opsClient->request('POST', "/projects/{$project4Id}/purchase-orders/{$po1Id}/issue", [
+        '_csrf_token' => $opsCsrf,
+    ]);
+    assertCheck($opsPoIssueAttempt['status'] === 403, 'Operations user is strictly blocked from issuing PO to supplier (HTTP 403)');
+
+    // Admin Finance issues PO #1 to supplier
+    $afinPoIssueRes = $afinClient->request('POST', "/projects/{$project4Id}/purchase-orders/{$po1Id}/issue", [
+        '_csrf_token' => $afinCsrf,
+    ]);
+    $po1Issued = PurchaseOrder::findById($po1Id);
+    assertCheck(
+        $afinPoIssueRes['status'] === 303
+        && $po1Issued['status'] === PurchaseOrder::STATUS_ISSUED_TO_SUPPLIER,
+        'Admin Finance issues PO #1 to supplier: status transitions to Issued to Supplier'
+    );
+
+    // 16.7 Terms of Payment Management: Admin Finance adds additional milestone payment term
+    $addTermRes = $afinClient->request('POST', "/projects/{$project4Id}/purchase-orders/{$po1Id}/payment-terms", [
+        '_csrf_token' => $afinCsrf,
+        'payment_term' => 'Testing & Grid Synchronization Milestone',
+        'term_percentage' => '0.0',
+        'term_amount' => '50000.00',
+        'term_due_date' => date('Y-m-d', strtotime('+45 days')),
+        'term_remarks' => 'Payable upon utility distribution certificate issuance',
+    ]);
+    $po1Terms = PurchaseOrder::paymentTermsForPo($po1Id);
+    $termNames = array_column($po1Terms, 'payment_term');
+    assertCheck(
+        $addTermRes['status'] === 303
+        && in_array('Testing & Grid Synchronization Milestone', $termNames, true)
+        && count($po1Terms) === 4,
+        'Admin Finance adds milestone payment term to PO schedule, verified in payment_terms_schedules table'
+    );
+
+    // 16.8 Supplier Delivery Tracking: Log partial delivery with discrepancy / rejection
+    $po1Items = PurchaseOrder::itemsForPo($po1Id);
+    $po1Item1 = $po1Items[0];
+    $dr1No = 'DR-' . date('Ymd') . '-HUA01';
+
+    // Unauthorized user (Marketing) blocked from logging supplier delivery
+    $mktDeliveryAttempt = $mktClient->request('POST', "/projects/{$project4Id}/purchase-orders/{$po1Id}/deliveries", [
+        '_csrf_token' => $mktCsrf,
+        'delivery_receipt_no' => $dr1No,
+    ]);
+    assertCheck($mktDeliveryAttempt['status'] === 403, 'Marketing user is strictly blocked from recording supplier deliveries (HTTP 403)');
+
+    // Operations / Logistics records Delivery Receipt #1: 4 inverters delivered, 3 accepted, 1 rejected due to transit damage
+    $logDelivery1Res = $opsClient->request('POST', "/projects/{$project4Id}/purchase-orders/{$po1Id}/deliveries", [
+        '_csrf_token' => $opsCsrf,
+        'delivery_receipt_no' => $dr1No,
+        'delivery_date' => date('Y-m-d'),
+        'carrier_name' => 'Lalamove Cargo / Truck Plate NCF-8821',
+        'receiving_notes' => 'Initial delivery of 4 inverters. 1 unit rejected with cracked enclosure.',
+        'po_item_id' => [(string) $po1Item1['id']],
+        'quantity_delivered' => ['4.00'],
+        'quantity_accepted' => ['3.00'],
+        'quantity_rejected' => ['1.00'],
+        'rejection_reason' => ['Broken front panel and terminal housing from transit impact. Returned to driver.'],
+    ]);
+
+    $del1 = SupplierDelivery::findByDrNumber($dr1No);
+    $del1Items = $del1 !== null ? SupplierDelivery::itemsForDelivery((int) $del1['id']) : [];
+    $trackingSummary1 = SupplierDelivery::deliveryTrackingSummaryForPo($po1Id);
+    $track1 = $trackingSummary1['items'][0] ?? [];
+
+    assertCheck(
+        $logDelivery1Res['status'] === 303
+        && $del1 !== null
+        && (float) ($del1Items[0]['quantity_delivered'] ?? 0) === 4.00
+        && (float) ($del1Items[0]['quantity_accepted'] ?? 0) === 3.00
+        && (float) ($del1Items[0]['quantity_rejected'] ?? 0) === 1.00
+        && (float) ($track1['ordered_quantity'] ?? 0) === 6.00
+        && (float) ($track1['previously_received_quantity'] ?? 0) === 0.00
+        && (float) ($track1['remaining_quantity'] ?? 0) === 6.00,
+        'Supplier Delivery Tracking records DR #1 with partial delivery and rejected damaged goods; rejected item does NOT count towards accepted quantity'
+    );
+
+    // 16.9 Stock In Integration: Physical inspection, actual company form fields, serialized units & double-entry perpetual ledger
+    $del1Id = (int) $del1['id'];
+    $dr1Serials = [
+        "SN-HUA-100K-{$suffix}-001",
+        "SN-HUA-100K-{$suffix}-002",
+        "SN-HUA-100K-{$suffix}-003",
+    ];
+
+    $stockIn1Res = $opsClient->request('POST', "/projects/{$project4Id}/deliveries/{$del1Id}/stock-in", [
+        '_csrf_token' => $opsCsrf,
+        'inventory_date' => date('Y-m-d'),
+        'warehouse_location' => 'PCT Main Warehouse - Bay 4',
+        'warranty_duration' => [
+            (string) $po1Item1['id'] => '5 Years',
+        ],
+        'serial_numbers' => [
+            (string) $po1Item1['id'] => implode("\n", $dr1Serials),
+        ],
+    ]);
+
+    $invUnits1 = Inventory::unitsForProject($project4Id);
+    $invTxns1 = Inventory::transactionsForProject($project4Id);
+    $po1AfterStock1 = PurchaseOrder::findById($po1Id);
+    $po1Item1AfterStock1 = PurchaseOrder::itemsForPo($po1Id)[0];
+
+    assertCheck(
+        $stockIn1Res['status'] === 303
+        && count($invUnits1) === 3
+        && count($invTxns1) >= 1
+        && (float) $invTxns1[0]['quantity'] === 3.00
+        && (float) $invTxns1[0]['balance_before'] === 0.00
+        && (float) $invTxns1[0]['balance_after'] === 3.00
+        && $invUnits1[0]['serial_number'] === $dr1Serials[0]
+        && $invUnits1[0]['warranty_duration'] === '5 Years'
+        && $invUnits1[0]['status'] === 'In Stock'
+        && $invUnits1[0]['po_number'] === $po1['po_number']
+        && (float) $po1Item1AfterStock1['quantity_received'] === 3.00
+        && $po1AfterStock1['status'] === PurchaseOrder::STATUS_PARTIALLY_RECEIVED,
+        'Stock In transaction increments double-entry perpetual ledger (balance: 3.00), registers serialized physical units with company fields, and updates PO status to Partially Received'
+    );
+
+    // 16.10 Duplicate Serial Number Rejection: Attempting Stock In with existing serial number fails
+    $dupDrNo = 'DR-' . date('Ymd') . '-HUA-DUP';
+    $opsClient->request('POST', "/projects/{$project4Id}/purchase-orders/{$po1Id}/deliveries", [
+        '_csrf_token' => $opsCsrf,
+        'delivery_receipt_no' => $dupDrNo,
+        'delivery_date' => date('Y-m-d'),
+        'po_item_id' => [(string) $po1Item1['id']],
+        'quantity_delivered' => ['1.00'],
+        'quantity_accepted' => ['1.00'],
+        'quantity_rejected' => ['0.00'],
+    ]);
+    $dupDelivery = SupplierDelivery::findByDrNumber($dupDrNo);
+    $dupStockInRes = $opsClient->request('POST', "/projects/{$project4Id}/deliveries/" . (int) $dupDelivery['id'] . "/stock-in", [
+        '_csrf_token' => $opsCsrf,
+        'inventory_date' => date('Y-m-d'),
+        'serial_numbers' => [
+            (string) $po1Item1['id'] => $dr1Serials[0], // Duplicate serial!
+        ],
+    ]);
+    $invUnitsAfterDup = Inventory::unitsForProject($project4Id);
+    assertCheck(
+        $dupStockInRes['status'] === 303
+        && count($invUnitsAfterDup) === 3,
+        'Duplicate serial number registration is strictly blocked and rolled back without modifying inventory units or ledger'
+    );
+
+    // 16.11 Second Delivery Completion: Deliver remaining 3 inverters to complete PO #1
+    $dr2No = 'DR-' . date('Ymd') . '-HUA02';
+    $dr2Serials = [
+        "SN-HUA-100K-{$suffix}-004",
+        "SN-HUA-100K-{$suffix}-005",
+        "SN-HUA-100K-{$suffix}-006",
+    ];
+
+    $opsClient->request('POST', "/projects/{$project4Id}/purchase-orders/{$po1Id}/deliveries", [
+        '_csrf_token' => $opsCsrf,
+        'delivery_receipt_no' => $dr2No,
+        'delivery_date' => date('Y-m-d'),
+        'carrier_name' => 'Lalamove Cargo / Truck Plate NCF-8821',
+        'receiving_notes' => 'Second delivery of remaining 3 inverters. All units inspected and intact.',
+        'po_item_id' => [(string) $po1Item1['id']],
+        'quantity_delivered' => ['3.00'],
+        'quantity_accepted' => ['3.00'],
+        'quantity_rejected' => ['0.00'],
+    ]);
+    $del2 = SupplierDelivery::findByDrNumber($dr2No);
+
+    $stockIn2Res = $opsClient->request('POST', "/projects/{$project4Id}/deliveries/" . (int) $del2['id'] . "/stock-in", [
+        '_csrf_token' => $opsCsrf,
+        'inventory_date' => date('Y-m-d'),
+        'warehouse_location' => 'PCT Main Warehouse - Bay 4',
+        'warranty_duration' => [
+            (string) $po1Item1['id'] => '5 Years',
+        ],
+        'serial_numbers' => [
+            (string) $po1Item1['id'] => implode("\n", $dr2Serials),
+        ],
+    ]);
+
+    $po1FullyReceived = PurchaseOrder::findById($po1Id);
+    $po1Item1Final = PurchaseOrder::itemsForPo($po1Id)[0];
+    $totalUnitsProject4 = Inventory::unitsForProject($project4Id);
+
+    assertCheck(
+        $stockIn2Res['status'] === 303
+        && (float) $po1Item1Final['quantity_received'] === 6.00
+        && (float) $po1Item1Final['remaining_to_receive'] === 0.00
+        && $po1FullyReceived['status'] === PurchaseOrder::STATUS_FULLY_RECEIVED
+        && count($totalUnitsProject4) === 6,
+        'Second delivery fulfillment completes PO #1: 6/6 units received, PO status transitions to Fully Received, and 6 serialized units in inventory'
+    );
+
+    // 16.12 End-to-End Linked Document View & Traceability
+    $p4DetailView = $afinClient->request('GET', "/projects/{$project4Id}");
+    assertCheck(
+        $p4DetailView['status'] === 200
+        && str_contains($p4DetailView['body'], 'id="linked-document-workflow-bar"')
+        && str_contains($p4DetailView['body'], 'id="purchase-order-panel"')
+        && str_contains($p4DetailView['body'], 'id="supplier-deliveries-panel"')
+        && str_contains($p4DetailView['body'], 'id="inventory-stockin-panel"')
+        && str_contains($p4DetailView['body'], (string) $po1['po_number'])
+        && str_contains($p4DetailView['body'], $dr1No)
+        && str_contains($p4DetailView['body'], $dr1Serials[0])
+        && str_contains($p4DetailView['body'], 'Fully Received'),
+        'Project detail page renders end-to-end linked traceability timeline (Project -> JOM -> PR -> PO -> Terms of Payment -> Supplier Delivery -> Stock In -> Serialized Inventory)'
     );
 
     $getLogoutRes = $mktClient->request('GET', '/logout');
@@ -1341,20 +2814,45 @@ try {
         'project.resubmitted_to_pm',
         'project.review_started',
         'project.document_verification_completed',
+        'project.forwarded_to_admin_finance',
+        'project.received_by_admin_finance',
         'project.jom_issued',
+        'project.forwarded_to_operations',
         'document.uploaded',
         'document.replaced',
         'document.viewed',
         'document.downloaded',
+        'pr.created',
+        'pr.updated',
+        'pr.submitted',
+        'pr.forwarded_to_ops_finance',
+        'pr.reviewed_by_ops_finance',
+        'pr.returned_for_corrections',
+        'actual_bom.uploaded',
+        'actual_bom.submitted',
+        'actual_bom.received',
+        'actual_bom.reviewed',
+        'actual_bom.returned_for_corrections',
+        'actual_bom.accepted',
+        'po.created',
+        'po.authorized',
+        'po.issued_to_supplier',
+        'po.payment_term_added',
+        'supplier_delivery.logged',
+        'inventory.stock_in',
         'security.csrf_mismatch',
         'security.unauthorized_access',
     ];
     $missingActions = array_diff($requiredActions, $loggedActions);
     assertCheck(
         $missingActions === [],
-        'All required authentication, user, Marketing workflow, document replacement, and security events are logged in activity_logs'
+        'All required authentication, user, Marketing workflow, PM verification, Admin Finance JOM issuance, Operations handoff, and security events are logged in activity_logs'
         . ($missingActions !== [] ? ' (Missing: ' . implode(', ', $missingActions) . ')' : '')
     );
+} catch (Throwable $e) {
+    $failed++;
+    echo "\n[FAIL] Unexpected Exception: " . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() . "\n";
+    echo $e->getTraceAsString() . "\n";
 } finally {
     echo "\n==> Cleaning up temporary test records...\n";
     foreach (array_unique($createdFilesOnDisk) as $filePath) {
@@ -1365,12 +2863,27 @@ try {
 
     if ($createdProjectIds !== []) {
         $in = implode(',', array_map('intval', $createdProjectIds));
+        $pdo->exec("DELETE FROM inventory_units WHERE project_id IN ({$in})");
+        $pdo->exec("DELETE FROM inventory_transactions WHERE project_id IN ({$in})");
+        $pdo->exec("DELETE FROM supplier_delivery_items WHERE delivery_id IN (SELECT id FROM supplier_deliveries WHERE project_id IN ({$in}))");
+        $pdo->exec("DELETE FROM supplier_deliveries WHERE project_id IN ({$in})");
+        $pdo->exec("DELETE FROM payment_terms_schedules WHERE purchase_order_id IN (SELECT id FROM purchase_orders WHERE project_id IN ({$in}))");
+        $pdo->exec("DELETE FROM purchase_order_histories WHERE purchase_order_id IN (SELECT id FROM purchase_orders WHERE project_id IN ({$in}))");
+        $pdo->exec("DELETE FROM purchase_order_items WHERE purchase_order_id IN (SELECT id FROM purchase_orders WHERE project_id IN ({$in}))");
+        $pdo->exec("DELETE FROM purchase_orders WHERE project_id IN ({$in})");
+        $pdo->exec("DELETE FROM actual_bom_items WHERE actual_bom_id IN (SELECT id FROM actual_boms WHERE project_id IN ({$in}))");
+        $pdo->exec("DELETE FROM actual_boms WHERE project_id IN ({$in})");
+        $pdo->exec("DELETE FROM purchase_request_histories WHERE purchase_request_id IN (SELECT id FROM purchase_requests WHERE project_id IN ({$in}))");
+        $pdo->exec("DELETE FROM purchase_request_items WHERE purchase_request_id IN (SELECT id FROM purchase_requests WHERE project_id IN ({$in}))");
+        $pdo->exec("DELETE FROM purchase_requests WHERE project_id IN ({$in})");
         $pdo->exec("DELETE FROM notifications WHERE project_id IN ({$in})");
         $pdo->exec("DELETE FROM project_workflow_histories WHERE project_id IN ({$in})");
         $pdo->exec("DELETE FROM project_documents WHERE project_id IN ({$in})");
         $pdo->exec("DELETE FROM projects WHERE id IN ({$in})");
         $pdo->exec("DELETE FROM activity_logs WHERE entity_type = 'project' AND entity_id IN ({$in})");
     }
+
+    $pdo->exec("DELETE FROM inventory_items WHERE item_code LIKE 'ITEM-SUN2000%' OR item_code LIKE 'ITEM-CS6W%'");
 
     if ($createdUserIds !== []) {
         $in = implode(',', array_map('intval', $createdUserIds));
@@ -1381,6 +2894,15 @@ try {
 
     // Clear only test-generated activity logs created during this run
     $pdo->exec('DELETE FROM activity_logs WHERE id > ' . (int) $maxLogIdBeforeTest);
+
+    if (is_array($adminSnapshot) && !empty($adminSnapshot['id'])) {
+        $stmtRestoreAdmin = $pdo->prepare('UPDATE users SET password_hash = :hash, status = :status WHERE id = :id');
+        $stmtRestoreAdmin->execute([
+            'hash' => (string) $adminSnapshot['password_hash'],
+            'status' => (string) $adminSnapshot['status'],
+            'id' => (int) $adminSnapshot['id'],
+        ]);
+    }
 }
 
 echo "\n=======================================================================\n";

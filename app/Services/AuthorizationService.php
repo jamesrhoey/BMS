@@ -4,9 +4,13 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Models\ActualBom;
 use App\Models\Department;
 use App\Models\Project;
+use App\Models\PurchaseOrder;
+use App\Models\PurchaseRequest;
 use App\Models\Role;
+use App\Models\SupplierDelivery;
 use App\Models\User;
 
 final class AuthorizationService
@@ -48,6 +52,96 @@ final class AuthorizationService
         }
 
         return ($user['department_code'] ?? '') === Department::CODE_PROJECT_MANAGEMENT;
+    }
+
+    /**
+     * @param array<string, mixed>|null $user
+     */
+    public static function isAdminFinanceUser(?array $user): bool
+    {
+        if ($user === null || ($user['status'] ?? '') !== User::STATUS_ACTIVE) {
+            return false;
+        }
+
+        return ($user['department_code'] ?? '') === Department::CODE_ADMIN_FINANCE;
+    }
+
+    /**
+     * @param array<string, mixed>|null $user
+     */
+    public static function isOperationsUser(?array $user): bool
+    {
+        if ($user === null || ($user['status'] ?? '') !== User::STATUS_ACTIVE) {
+            return false;
+        }
+
+        return ($user['department_code'] ?? '') === Department::CODE_OPERATIONS;
+    }
+
+    /**
+     * @param array<string, mixed>|null $user
+     */
+    public static function isOpsFinanceUser(?array $user): bool
+    {
+        if ($user === null || ($user['status'] ?? '') !== User::STATUS_ACTIVE) {
+            return false;
+        }
+
+        return ($user['department_code'] ?? '') === Department::CODE_OPERATION_FINANCE;
+    }
+
+    /**
+     * @param array<string, mixed>|null $user
+     */
+    public static function isLogisticsUser(?array $user): bool
+    {
+        if ($user === null || ($user['status'] ?? '') !== User::STATUS_ACTIVE) {
+            return false;
+        }
+
+        return ($user['department_code'] ?? '') === Department::CODE_LOGISTICS;
+    }
+
+    /**
+     * Access to dedicated Operations workspace routes (/operations/*).
+     *
+     * @param array<string, mixed>|null $user
+     */
+    public static function canAccessOperationsModule(?array $user): bool
+    {
+        if ($user === null || ($user['status'] ?? '') !== User::STATUS_ACTIVE) {
+            return false;
+        }
+
+        return self::isAdmin($user) || self::isOperationsUser($user);
+    }
+
+    /**
+     * Access to dedicated OPS Finance workspace routes (/ops-finance/*).
+     *
+     * @param array<string, mixed>|null $user
+     */
+    public static function canAccessOpsFinanceModule(?array $user): bool
+    {
+        if ($user === null || ($user['status'] ?? '') !== User::STATUS_ACTIVE) {
+            return false;
+        }
+
+        return self::isAdmin($user) || self::isOpsFinanceUser($user);
+    }
+
+    /**
+     * Access to dedicated Admin Finance workspace routes (/admin-finance/*).
+     *
+     * @param array<string, mixed>|null $user
+     */
+    public static function canAccessAdminFinanceModule(?array $user): bool
+    {
+        if ($user === null || ($user['status'] ?? '') !== User::STATUS_ACTIVE) {
+            return false;
+        }
+
+        return self::isAdmin($user) || self::isAdminFinanceUser($user);
     }
 
     /**
@@ -173,6 +267,25 @@ final class AuthorizationService
             }
         }
 
+        if (self::isAdminFinanceUser($user)) {
+            if (Project::isForwardedToAdminFinance($project) || Project::isJomIssued($project)) {
+                return true;
+            }
+        }
+
+        if (self::isOperationsUser($user)) {
+            if (Project::isForwardedToOperations($project) || ($userDeptId !== null && $projectDeptId === $userDeptId && !empty($project['jom_number']))) {
+                return true;
+            }
+        }
+
+        if (self::isOpsFinanceUser($user)) {
+            $pr = PurchaseRequest::findByProjectId((int) ($project['id'] ?? 0));
+            if ($pr !== null && !empty($pr['submitted_at'])) {
+                return true;
+            }
+        }
+
         return false;
     }
 
@@ -258,7 +371,12 @@ final class AuthorizationService
         }
 
         $status = (string) ($project['status'] ?? '');
-        if (!in_array($status, [Project::STATUS_SUBMITTED_FOR_VERIFICATION, Project::STATUS_RESUBMITTED_FOR_VERIFICATION, Project::STATUS_SUBMITTED], true)) {
+        if (!in_array($status, [
+            Project::STATUS_SUBMITTED_FOR_VERIFICATION,
+            Project::STATUS_SUBMITTED_FOR_VERIFICATION_SHORT,
+            Project::STATUS_RESUBMITTED_FOR_VERIFICATION,
+            Project::STATUS_SUBMITTED,
+        ], true)) {
             return false;
         }
 
@@ -317,20 +435,124 @@ final class AuthorizationService
     }
 
     /**
-     * Determine whether a user can download documents attached to a project.
+     * Determine whether a user can forward a PM-approved project to Admin Finance.
+     * Restricted to Project Management users and Administrators.
+     * Prevents duplicate forwarding if the project has already been forwarded.
      *
      * @param array<string, mixed>|null $user
      * @param array<string, mixed> $project
      */
-    public static function canDownloadDocument(?array $user, array $project): bool
+    public static function canForwardToAdminFinance(?array $user, array $project): bool
     {
+        if ($user === null) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::isProjectManagementUser($user)) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::hasPermission($user, 'pm.projects.forward_afin')) {
+            return false;
+        }
+
+        if (Project::isForwardedToAdminFinance($project)) {
+            return false;
+        }
+
+        if (!Project::isApprovedByPm($project)) {
+            return false;
+        }
+
+        if (self::isAdmin($user)) {
+            return true;
+        }
+
         return self::canViewProject($user, $project);
     }
 
     /**
+     * Determine whether a user can download or view documents attached to a project.
+     * Operations users may only access the forwarded SLD and Marketing BOM ('BOM') documents
+     * on projects forwarded to Operations by Admin Finance.
+     *
+     * @param array<string, mixed>|null $user
+     * @param array<string, mixed> $project
+     * @param array<string, mixed>|null $document
+     */
+    public static function canDownloadDocument(?array $user, array $project, ?array $document = null): bool
+    {
+        if (!self::canViewProject($user, $project)) {
+            return false;
+        }
+
+        if (self::isOperationsUser($user) && !self::isAdmin($user)) {
+            if (!Project::isForwardedToOperations($project) && empty($project['jom_number'])) {
+                return false;
+            }
+
+            if ($document !== null) {
+                $docType = (string) ($document['document_type'] ?? '');
+                if (!in_array($docType, ['SLD', 'BOM', PurchaseRequest::DOC_TYPE_ATTACHMENT], true)) {
+                    return false;
+                }
+            }
+        }
+
+        if (self::isOpsFinanceUser($user) && !self::isAdmin($user)) {
+            $pr = PurchaseRequest::findByProjectId((int) ($project['id'] ?? 0));
+            if ($pr === null || empty($pr['submitted_at'])) {
+                return false;
+            }
+
+            if ($document !== null) {
+                $docType = (string) ($document['document_type'] ?? '');
+                if (!in_array($docType, [
+                    'SLD',
+                    'BOM',
+                    PurchaseRequest::DOC_TYPE_ATTACHMENT,
+                    ActualBom::DOC_TYPE_ACTUAL_BOM,
+                    ActualBom::DOC_TYPE_SUPPORTING,
+                ], true)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Determine whether a user can mark an incoming project as Under Admin Finance Review.
+     *
+     * @param array<string, mixed>|null $user
+     * @param array<string, mixed> $project
+     */
+    public static function canStartAdminFinanceReview(?array $user, array $project): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::isAdminFinanceUser($user)) {
+            return false;
+        }
+
+        if (!empty($project['jom_number']) || Project::isForwardedToOperations($project)) {
+            return false;
+        }
+
+        $status = (string) ($project['status'] ?? '');
+
+        return $status === Project::STATUS_FORWARDED_TO_ADMIN_FINANCE
+            || (!empty($project['forwarded_to_afin_at']) && $status !== Project::STATUS_UNDER_ADMIN_FINANCE_REVIEW);
+    }
+
+    /**
      * Determine whether the user is authorized to issue a JOM (Job Order Memorandum) number.
-     * Only authorized Project Management users and administrators can issue JOM numbers,
-     * and only once document verification is fully completed and no JOM has been issued yet.
+     * Under the new official company workflow (MARKETING -> PM -> ADMIN FINANCE -> OPERATIONS -> OPS FINANCE -> ADMIN FINANCE),
+     * Admin Finance is the ONLY department responsible for issuing JOM numbers (plus Administrator full system access).
+     * Do not allow JOM issuance for projects that have not been approved and forwarded by Project Management.
      *
      * @param array<string, mixed>|null $user
      * @param array<string, mixed> $project
@@ -341,11 +563,12 @@ final class AuthorizationService
             return false;
         }
 
-        if (!self::isAdmin($user) && !self::isProjectManagementUser($user)) {
+        // Explicitly block Project Management, Marketing, Operations, Logistics, and Operation Finance users
+        if (!self::isAdmin($user) && !self::isAdminFinanceUser($user)) {
             return false;
         }
 
-        if (!self::isAdmin($user) && !self::hasPermission($user, 'pm.projects.jom_issue')) {
+        if (!self::isAdmin($user) && !self::hasPermission($user, 'afin.projects.jom_issue')) {
             return false;
         }
 
@@ -354,10 +577,408 @@ final class AuthorizationService
             return false;
         }
 
-        // Must have completed document verification
-        $status = (string) ($project['status'] ?? '');
-        $vStatus = (string) ($project['verification_status'] ?? '');
+        // Project must have been approved and forwarded by Project Management to Admin Finance
+        return Project::isApprovedByPm($project) && Project::isForwardedToAdminFinance($project);
+    }
 
-        return $status === Project::STATUS_VERIFICATION_COMPLETED || $vStatus === Project::VERIFICATION_VERIFIED;
+    /**
+     * Determine whether a user can forward the JOM number, SLD, and Marketing BOM to Operations.
+     * Restricted to Admin Finance users and Administrators after JOM issuance.
+     * Prevents duplicate forwarding if already forwarded to Operations.
+     *
+     * @param array<string, mixed>|null $user
+     * @param array<string, mixed> $project
+     */
+    public static function canForwardToOperations(?array $user, array $project): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::isAdminFinanceUser($user)) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::hasPermission($user, 'afin.projects.forward_ops')) {
+            return false;
+        }
+
+        if (Project::isForwardedToOperations($project)) {
+            return false;
+        }
+
+        return !empty($project['jom_number']);
+    }
+
+    /**
+     * Determine whether a user can create or edit a Draft/Returned Purchase Request (PR).
+     * Restricted strictly to Operations users (and Administrators) on projects forwarded to Operations.
+     *
+     * @param array<string, mixed>|null $user
+     * @param array<string, mixed> $project
+     * @param array<string, mixed>|null $existingPr
+     */
+    public static function canPreparePurchaseRequest(?array $user, array $project, ?array $existingPr = null): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::isOperationsUser($user)) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::hasPermission($user, 'ops.pr.manage')) {
+            return false;
+        }
+
+        if (!Project::isForwardedToOperations($project) || empty($project['jom_number'])) {
+            return false;
+        }
+
+        if ($existingPr !== null && !PurchaseRequest::isEditableByOperations($existingPr)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Determine whether a user can submit a Purchase Request to OPS Finance.
+     *
+     * @param array<string, mixed>|null $user
+     * @param array<string, mixed> $project
+     * @param array<string, mixed>|null $pr
+     */
+    public static function canSubmitPurchaseRequest(?array $user, array $project, ?array $pr): bool
+    {
+        if ($pr === null) {
+            return false;
+        }
+
+        return self::canPreparePurchaseRequest($user, $project, $pr)
+            && count($pr['items'] ?? []) > 0;
+    }
+
+    /**
+     * Determine whether a user (OPS Finance, Admin Finance, or Admin) can review or return a submitted Purchase Request.
+     *
+     * @param array<string, mixed>|null $user
+     * @param array<string, mixed> $project
+     * @param array<string, mixed>|null $pr
+     */
+    public static function canReviewPurchaseRequest(?array $user, array $project, ?array $pr): bool
+    {
+        if ($user === null || $pr === null) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::isOpsFinanceUser($user) && !self::isAdminFinanceUser($user)) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::hasPermission($user, 'opfin.pr.review') && !self::hasPermission($user, 'afin.pr.approve')) {
+            return false;
+        }
+
+        return in_array((string) ($pr['status'] ?? ''), [
+            PurchaseRequest::STATUS_SUBMITTED_TO_OPS_FINANCE,
+            PurchaseRequest::STATUS_SUBMITTED,
+            PurchaseRequest::STATUS_UNDER_OPS_FINANCE_REVIEW,
+            PurchaseRequest::STATUS_UNDER_REVIEW,
+        ], true);
+    }
+
+    /**
+     * Determine whether an authorized user (OPS Finance, Admin Finance, or Admin) can formally approve a Purchase Request.
+     * Operations, Marketing, and Project Management users are strictly forbidden from approving PRs.
+     *
+     * @param array<string, mixed>|null $user
+     * @param array<string, mixed> $project
+     * @param array<string, mixed>|null $pr
+     */
+    public static function canApprovePurchaseRequest(?array $user, array $project, ?array $pr): bool
+    {
+        if ($user === null || $pr === null) {
+            return false;
+        }
+
+        if ((self::isOperationsUser($user) || self::isMarketingUser($user) || self::isProjectManagementUser($user)) && !self::isAdmin($user)) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::isOpsFinanceUser($user) && !self::isAdminFinanceUser($user)) {
+            return false;
+        }
+
+        if (!self::isAdmin($user)
+            && !self::hasPermission($user, 'opfin.pr.approve')
+            && !self::hasPermission($user, 'afin.pr.approve')) {
+            return false;
+        }
+
+        return in_array((string) ($pr['status'] ?? ''), [
+            PurchaseRequest::STATUS_SUBMITTED_TO_OPS_FINANCE,
+            PurchaseRequest::STATUS_SUBMITTED,
+            PurchaseRequest::STATUS_UNDER_OPS_FINANCE_REVIEW,
+            PurchaseRequest::STATUS_UNDER_REVIEW,
+            PurchaseRequest::STATUS_ACTUAL_BOM_SUBMITTED,
+        ], true);
+    }
+
+    /**
+     * Determine whether an authorized user can formally reject a Purchase Request with reason.
+     *
+     * @param array<string, mixed>|null $user
+     * @param array<string, mixed> $project
+     * @param array<string, mixed>|null $pr
+     */
+    public static function canRejectPurchaseRequest(?array $user, array $project, ?array $pr): bool
+    {
+        if ($user === null || $pr === null) {
+            return false;
+        }
+
+        if ((self::isOperationsUser($user) || self::isMarketingUser($user) || self::isProjectManagementUser($user)) && !self::isAdmin($user)) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::isOpsFinanceUser($user) && !self::isAdminFinanceUser($user)) {
+            return false;
+        }
+
+        if (!self::isAdmin($user)
+            && !self::hasPermission($user, 'opfin.pr.reject')
+            && !self::hasPermission($user, 'afin.pr.reject')) {
+            return false;
+        }
+
+        return in_array((string) ($pr['status'] ?? ''), [
+            PurchaseRequest::STATUS_SUBMITTED_TO_OPS_FINANCE,
+            PurchaseRequest::STATUS_SUBMITTED,
+            PurchaseRequest::STATUS_UNDER_OPS_FINANCE_REVIEW,
+            PurchaseRequest::STATUS_UNDER_REVIEW,
+            PurchaseRequest::STATUS_ACTUAL_BOM_SUBMITTED,
+        ], true);
+    }
+
+    /**
+     * Determine whether a user can upload or update the Actual BOM with specifications.
+     * Strictly restricted to OPS Finance users (and Administrators).
+     * Operations, Marketing, PM, and Admin Finance cannot upload or modify OPS Finance Actual BOM records.
+     *
+     * @param array<string, mixed>|null $user
+     * @param array<string, mixed> $project
+     * @param array<string, mixed>|null $pr
+     * @param array<string, mixed>|null $existingActualBom
+     */
+    public static function canUploadActualBom(
+        ?array $user,
+        array $project,
+        ?array $pr,
+        ?array $existingActualBom = null
+    ): bool {
+        if ($user === null || $pr === null) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::isOpsFinanceUser($user)) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::hasPermission($user, 'opfin.actual_bom.manage')) {
+            return false;
+        }
+
+        if (!PurchaseRequest::isSubmittedToOpsFinance($pr)) {
+            return false;
+        }
+
+        if ($existingActualBom !== null && !ActualBom::isEditableByOpsFinance($existingActualBom)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Determine whether a user can submit the Actual BOM to Admin Finance.
+     *
+     * @param array<string, mixed>|null $user
+     * @param array<string, mixed> $project
+     * @param array<string, mixed>|null $pr
+     * @param array<string, mixed>|null $actualBom
+     */
+    public static function canSubmitActualBom(
+        ?array $user,
+        array $project,
+        ?array $pr,
+        ?array $actualBom
+    ): bool {
+        if ($actualBom === null || empty($actualBom['document_id']) || count($actualBom['items'] ?? []) === 0) {
+            return false;
+        }
+
+        return self::canUploadActualBom($user, $project, $pr, $actualBom);
+    }
+
+    /**
+     * Determine whether a user (Admin Finance or Admin) can receive, review, return, or accept a submitted Actual BOM.
+     *
+     * @param array<string, mixed>|null $user
+     * @param array<string, mixed> $project
+     * @param array<string, mixed>|null $actualBom
+     */
+    public static function canReviewActualBom(?array $user, array $project, ?array $actualBom): bool
+    {
+        if ($user === null || $actualBom === null) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::isAdminFinanceUser($user)) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::hasPermission($user, 'afin.actual_bom.review')) {
+            return false;
+        }
+
+        return in_array((string) ($actualBom['status'] ?? ''), [
+            ActualBom::STATUS_SUBMITTED_TO_ADMIN_FINANCE,
+            ActualBom::STATUS_RECEIVED,
+            ActualBom::STATUS_UNDER_REVIEW,
+        ], true);
+    }
+
+    /**
+     * Determine whether an authorized user (Admin Finance or Admin) can create/edit a PO from an approved PR.
+     * Operations, Marketing, and PM are strictly forbidden from creating POs.
+     *
+     * @param array<string, mixed>|null $user
+     * @param array<string, mixed> $project
+     * @param array<string, mixed>|null $pr
+     */
+    public static function canCreatePurchaseOrder(?array $user, array $project, ?array $pr): bool
+    {
+        if ($user === null || $pr === null) {
+            return false;
+        }
+
+        if ((self::isOperationsUser($user) || self::isMarketingUser($user) || self::isProjectManagementUser($user) || self::isOpsFinanceUser($user)) && !self::isAdmin($user)) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::isAdminFinanceUser($user)) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::hasPermission($user, 'afin.po.manage')) {
+            return false;
+        }
+
+        return in_array((string) ($pr['status'] ?? ''), [
+            PurchaseRequest::STATUS_APPROVED,
+            PurchaseRequest::STATUS_PARTIALLY_ORDERED,
+            PurchaseRequest::STATUS_CONVERTED_TO_PO,
+        ], true);
+    }
+
+    /**
+     * Determine whether an authorized user (Admin Finance or Admin) can financially authorize a PO.
+     *
+     * @param array<string, mixed>|null $user
+     * @param array<string, mixed> $project
+     * @param array<string, mixed>|null $po
+     */
+    public static function canAuthorizePurchaseOrder(?array $user, array $project, ?array $po): bool
+    {
+        if ($user === null || $po === null) {
+            return false;
+        }
+
+        if ((self::isOperationsUser($user) || self::isMarketingUser($user) || self::isProjectManagementUser($user) || self::isOpsFinanceUser($user)) && !self::isAdmin($user)) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::isAdminFinanceUser($user)) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::hasPermission($user, 'afin.po.authorize')) {
+            return false;
+        }
+
+        return in_array((string) ($po['status'] ?? ''), [
+            PurchaseOrder::STATUS_DRAFT,
+            PurchaseOrder::STATUS_PENDING_APPROVAL,
+        ], true);
+    }
+
+    /**
+     * Determine whether an authorized user (Admin Finance or Admin) can issue an authorized PO to a supplier.
+     *
+     * @param array<string, mixed>|null $user
+     * @param array<string, mixed> $project
+     * @param array<string, mixed>|null $po
+     */
+    public static function canIssuePurchaseOrder(?array $user, array $project, ?array $po): bool
+    {
+        if ($user === null || $po === null) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::isAdminFinanceUser($user)) {
+            return false;
+        }
+
+        return (string) ($po['status'] ?? '') === PurchaseOrder::STATUS_APPROVED;
+    }
+
+    /**
+     * Determine whether an authorized user can log or inspect supplier delivery shipments.
+     *
+     * @param array<string, mixed>|null $user
+     * @param array<string, mixed> $project
+     * @param array<string, mixed>|null $po
+     */
+    public static function canReceiveSupplierDelivery(?array $user, array $project, ?array $po): bool
+    {
+        if ($user === null || $po === null) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::isLogisticsUser($user) && !self::isOperationsUser($user)) {
+            return false;
+        }
+
+        return in_array((string) ($po['status'] ?? ''), [
+            PurchaseOrder::STATUS_ISSUED_TO_SUPPLIER,
+            PurchaseOrder::STATUS_PARTIALLY_RECEIVED,
+        ], true);
+    }
+
+    /**
+     * Determine whether an authorized user (Logistics, Operations, or Admin) can execute Stock In.
+     *
+     * @param array<string, mixed>|null $user
+     * @param array<string, mixed> $project
+     * @param array<string, mixed>|null $delivery
+     */
+    public static function canExecuteStockIn(?array $user, array $project, ?array $delivery): bool
+    {
+        if ($user === null || $delivery === null) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::isLogisticsUser($user) && !self::isOperationsUser($user)) {
+            return false;
+        }
+
+        return in_array((string) ($delivery['status'] ?? ''), [
+            SupplierDelivery::STATUS_PENDING_INSPECTION,
+            SupplierDelivery::STATUS_INSPECTED,
+            SupplierDelivery::STATUS_PARTIALLY_RECEIVED,
+            SupplierDelivery::STATUS_DISCREPANCY,
+        ], true);
     }
 }

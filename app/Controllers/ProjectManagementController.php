@@ -145,26 +145,60 @@ final class ProjectManagementController extends Controller
 
         Session::flash(
             'success',
-            "Document verification completed for project '{$project['project_code']}'. All required documents have been verified. The project is now eligible for JOM number issuance."
+            "Project '{$project['project_code']}' has been Approved by Project Management. All required documents have been verified. You may now forward the project to Admin Finance."
         );
         Response::redirect('/projects/' . (int) $project['id']);
     }
 
     /**
-     * Authorize and issue official JOM (Job Order Memorandum) number for a verified project.
-     * Available only to authorized Project Management users and Administrators.
+     * Forward an approved Project Management project to Admin Finance.
+     * Routes the project into the Admin Finance incoming queue and prevents duplicate forwarding.
+     *
+     * @param array<string, string> $params
+     */
+    public function forwardToAdminFinance(Request $request, array $params = []): void
+    {
+        $user = $this->requirePmAccess($request);
+        $project = $this->loadProjectOrFail($params);
+
+        if (!AuthorizationService::canForwardToAdminFinance($user, $project)) {
+            $this->denyAccess(
+                $request,
+                "User '{$user['username']}' attempted to forward project '{$project['project_code']}' to Admin Finance without authorization or when already forwarded."
+            );
+        }
+
+        $input = $request->allPost();
+        $result = ProjectService::forwardToAdminFinance($project, $input, $user, $request);
+
+        if (!$result['success']) {
+            Session::flash('error', $result['error'] ?? 'Unable to forward project to Admin Finance.');
+            Response::redirect('/projects/' . (int) $project['id'] . '#pm-review-panel');
+        }
+
+        Session::flash(
+            'success',
+            "Project '{$project['project_code']}' has been forwarded to Admin Finance. It is now visible in the Admin Finance incoming project queue for JOM number issuance."
+        );
+        Response::redirect('/projects/' . (int) $project['id']);
+    }
+
+    /**
+     * Authorize and issue official JOM (Job Order Memorandum) number for a forwarded project.
+     * Under the new company workflow, Admin Finance (and Administrators) issue JOM numbers —
+     * Project Management users are strictly blocked from issuing JOM numbers.
      *
      * @param array<string, string> $params
      */
     public function issueJomNumber(Request $request, array $params = []): void
     {
-        $user = $this->requirePmAccess($request);
+        $user = $this->requireUser();
         $project = $this->loadProjectOrFail($params);
 
         if (!AuthorizationService::canIssueJomNumber($user, $project)) {
             $this->denyAccess(
                 $request,
-                "User '{$user['username']}' attempted to issue JOM number on project '{$project['project_code']}' without authorization or prior verification."
+                "User '{$user['username']}' attempted to issue JOM number on project '{$project['project_code']}' without Admin Finance authorization."
             );
         }
 
@@ -178,7 +212,7 @@ final class ProjectManagementController extends Controller
         $jom = $result['jom_number'] ?? '';
         Session::flash(
             'success',
-            "Job Order Memorandum (JOM) Number '{$jom}' has been successfully issued by Project Management. The project is now authorized for downstream departmental execution."
+            "Job Order Memorandum (JOM) Number '{$jom}' has been successfully issued by Admin Finance."
         );
         Response::redirect('/projects/' . (int) $project['id']);
     }

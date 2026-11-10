@@ -599,7 +599,12 @@ final class ProjectService
     public static function startReview(array $project, array $actor, Request $request): array
     {
         $currentStatus = (string) ($project['status'] ?? '');
-        if (!in_array($currentStatus, [Project::STATUS_SUBMITTED_FOR_VERIFICATION, Project::STATUS_RESUBMITTED_FOR_VERIFICATION, Project::STATUS_SUBMITTED], true)) {
+        if (!in_array($currentStatus, [
+            Project::STATUS_SUBMITTED_FOR_VERIFICATION,
+            Project::STATUS_SUBMITTED_FOR_VERIFICATION_SHORT,
+            Project::STATUS_RESUBMITTED_FOR_VERIFICATION,
+            Project::STATUS_SUBMITTED,
+        ], true)) {
             return [
                 'success' => false,
                 'error' => 'Only submitted projects awaiting verification can be marked as Under Review.',
@@ -649,7 +654,7 @@ final class ProjectService
     /**
      * Approve and complete the document verification stage for a project.
      * Enforces complete presence of all required documents (6 of 6).
-     * Does NOT issue a JOM number (pending business-rule confirmation).
+     * Does NOT issue a JOM number (Admin Finance is responsible for JOM issuance).
      *
      * @param array<string, mixed> $project
      * @param array<string, mixed> $input
@@ -703,10 +708,10 @@ final class ProjectService
         $pmDeptId = $project['current_department_id'];
         $originDeptId = $project['origin_department_id'] ? (int) $project['origin_department_id'] : null;
 
-        $targetStatus = Project::STATUS_VERIFICATION_COMPLETED;
+        $targetStatus = Project::STATUS_APPROVED_BY_PM;
         $notesText = $verificationNotes !== ''
             ? $verificationNotes
-            : 'All required Marketing documents verified complete and readable by Project Management.';
+            : 'All required Marketing documents verified complete and approved by Project Management.';
 
         Database::transaction(static function () use (
             $project,
@@ -735,15 +740,15 @@ final class ProjectService
                 'notes' => $notesText,
             ]);
 
-            // Notify origin/Marketing department users of completion
+            // Notify origin/Marketing department users of PM approval
             if ($originDeptId !== null) {
                 Notification::notifyDepartmentUsers(
                     $originDeptId,
                     $projectId,
                     'project.verification_completed',
-                    "Document Verification Completed: {$project['project_code']}",
+                    "Approved by Project Management: {$project['project_code']}",
                     sprintf(
-                        "%s (%s) document verification was completed by %s. All %d required documents verified.",
+                        "%s (%s) document verification was approved by %s. All %d required documents verified. Ready to forward to Admin Finance.",
                         $project['project_name'],
                         $project['project_code'],
                         $actor['full_name'] ?? $actor['username'],
@@ -757,7 +762,7 @@ final class ProjectService
                 'project.document_verification_completed',
                 'project',
                 $projectId,
-                "Project Management reviewer '{$actor['full_name']}' completed document verification for '{$project['project_code']}'. Ready for JOM issuance.",
+                "Project Management reviewer '{$actor['full_name']}' approved document verification for '{$project['project_code']}'. Ready for forwarding to Admin Finance.",
                 $request,
                 $actorId,
                 false
@@ -768,9 +773,166 @@ final class ProjectService
     }
 
     /**
+     * Forward an approved Project Management project to Admin Finance.
+     * Routes the project to Admin Finance incoming queue, records forwarding user & timestamp,
+     * prevents duplicate forwarding, and preserves full verification history.
+     * Does NOT automatically proceed to Operations or issue a JOM number.
+     *
+     * @param array<string, mixed> $project
+     * @param array<string, mixed> $input
+     * @param array<string, mixed> $actor
+     * @return array{success: bool, error?: string}
+     */
+    public static function forwardToAdminFinance(
+        array $project,
+        array $input,
+        array $actor,
+        Request $request
+    ): array {
+        if (!AuthorizationService::canForwardToAdminFinance($actor, $project)) {
+            return [
+                'success' => false,
+                'error' => 'This project cannot be forwarded to Admin Finance in its current status, or has already been forwarded.',
+            ];
+        }
+
+        // Verify required documents remain complete
+        $checklist = MarketingChecklistService::evaluateProject($project);
+        if (!$checklist['is_complete']) {
+            return [
+                'success' => false,
+                'error' => 'Cannot forward project to Admin Finance while required documents are incomplete.',
+            ];
+        }
+
+        $forwardNotes = trim((string) ($input['operations_forward_notes'] ?? $input['forward_notes'] ?? ''));
+        if (mb_strlen($forwardNotes, 'UTF-8') > 2000) {
+            return [
+                'success' => false,
+                'error' => 'Forwarding notes must not exceed 2,000 characters.',
+            ];
+        }
+
+        $afinDept = Department::findByCode(Department::CODE_ADMIN_FINANCE);
+        if ($afinDept === null) {
+            return [
+                'success' => false,
+                'error' => 'Admin Finance department configuration is missing.',
+            ];
+        }
+
+        $afinDeptId = (int) $afinDept['id'];
+        $projectId = (int) $project['id'];
+        $actorId = (int) $actor['id'];
+
+        $notesText = $forwardNotes !== ''
+            ? $forwardNotes
+            : 'Project Management approved all required documents and forwarded the project to Admin Finance for JOM issuance and financial processing.';
+
+        return Database::transaction(static function () use (
+            $project,
+            $projectId,
+            $afinDeptId,
+            $actorId,
+            $actor,
+            $notesText,
+            $request
+        ): array {
+            $stmt = Database::connection()->prepare('SELECT * FROM projects WHERE id = :id FOR UPDATE');
+            $stmt->execute(['id' => $projectId]);
+            $locked = $stmt->fetch();
+
+            if (!$locked) {
+                return ['success' => false, 'error' => 'Project record not found.'];
+            }
+
+            if (Project::isForwardedToAdminFinance($locked)) {
+                return [
+                    'success' => false,
+                    'error' => 'This project has already been forwarded to Admin Finance. Duplicate forwarding is prevented.',
+                ];
+            }
+
+            if (!Project::isApprovedByPm($locked)) {
+                return [
+                    'success' => false,
+                    'error' => 'Only projects approved by Project Management can be forwarded to Admin Finance.',
+                ];
+            }
+
+            $fromStatus = (string) $locked['status'];
+            $fromDeptId = $locked['current_department_id'] ? (int) $locked['current_department_id'] : null;
+            $originDeptId = $locked['origin_department_id'] ? (int) $locked['origin_department_id'] : null;
+
+            $forwarded = Project::markForwardedToAdminFinance($projectId, $afinDeptId, $actorId, $notesText);
+            if (!$forwarded) {
+                return [
+                    'success' => false,
+                    'error' => 'This project has already been forwarded to Admin Finance.',
+                ];
+            }
+
+            ProjectWorkflowHistory::record([
+                'project_id' => $projectId,
+                'from_status' => $fromStatus,
+                'to_status' => Project::STATUS_FORWARDED_TO_ADMIN_FINANCE,
+                'action' => 'forwarded_to_admin_finance',
+                'from_department_id' => $fromDeptId,
+                'to_department_id' => $afinDeptId,
+                'acted_by' => $actorId,
+                'notes' => $notesText,
+            ]);
+
+            // Notify Admin Finance incoming queue users
+            Notification::notifyDepartmentUsers(
+                $afinDeptId,
+                $projectId,
+                'project.forwarded_to_admin_finance',
+                "Project Forwarded to Admin Finance: {$locked['project_code']}",
+                sprintf(
+                    "Project '%s' (%s) was verified and approved by Project Management (%s) and forwarded to Admin Finance for JOM issuance.",
+                    $locked['project_name'],
+                    $locked['project_code'],
+                    $actor['full_name'] ?? $actor['username']
+                ),
+                '/projects/' . $projectId
+            );
+
+            // Notify origin Marketing team
+            if ($originDeptId !== null && $originDeptId !== $afinDeptId) {
+                Notification::notifyDepartmentUsers(
+                    $originDeptId,
+                    $projectId,
+                    'project.forwarded_to_admin_finance',
+                    "Project Forwarded to Admin Finance: {$locked['project_code']}",
+                    sprintf(
+                        "Project '%s' (%s) was approved by Project Management and forwarded to Admin Finance.",
+                        $locked['project_name'],
+                        $locked['project_code']
+                    ),
+                    '/projects/' . $projectId
+                );
+            }
+
+            ActivityLogger::log(
+                'project.forwarded_to_admin_finance',
+                'project',
+                $projectId,
+                "Project Management reviewer '{$actor['full_name']}' forwarded approved project '{$locked['project_code']}' ({$locked['project_name']}) to Admin Finance.",
+                $request,
+                $actorId,
+                false
+            );
+
+            return ['success' => true];
+        });
+    }
+
+    /**
      * Generate a unique Job Order Memorandum (JOM) number on the server.
      * Uses configurable prefix and series format (e.g. JOM-YYYYMM-XXXX).
      * Enforces database-level uniqueness and sequential increment.
+     * Safely preserved for Admin Finance JOM issuance stage.
      */
     public static function generateUniqueJomNumber(): string
     {
@@ -816,8 +978,67 @@ final class ProjectService
     }
 
     /**
-     * Authorize and issue official JOM (Job Order Memorandum) number by Project Management.
-     * Requires document verification completion and verified status.
+     * Mark an approved incoming project as Under Admin Finance Review.
+     *
+     * @param array<string, mixed> $project
+     * @param array<string, mixed> $actor
+     * @return array{success: bool, error?: string}
+     */
+    public static function startAdminFinanceReview(
+        array $project,
+        array $actor,
+        Request $request
+    ): array {
+        if (!AuthorizationService::canStartAdminFinanceReview($actor, $project)) {
+            return [
+                'success' => false,
+                'error' => 'This project cannot be marked as Under Admin Finance Review in its current status.',
+            ];
+        }
+
+        $projectId = (int) $project['id'];
+        $actorId = (int) $actor['id'];
+        $fromStatus = (string) ($project['status'] ?? Project::STATUS_FORWARDED_TO_ADMIN_FINANCE);
+        $afinDept = Department::findByCode(Department::CODE_ADMIN_FINANCE);
+        $afinDeptId = $afinDept !== null ? (int) $afinDept['id'] : ($project['current_department_id'] ? (int) $project['current_department_id'] : null);
+
+        return Database::transaction(static function () use ($project, $projectId, $actorId, $actor, $fromStatus, $afinDeptId, $request): array {
+            $updated = Project::markUnderAdminFinanceReview($projectId, $actorId);
+            if (!$updated) {
+                return [
+                    'success' => false,
+                    'error' => 'Unable to mark project as Under Admin Finance Review.',
+                ];
+            }
+
+            ProjectWorkflowHistory::record([
+                'project_id' => $projectId,
+                'from_status' => $fromStatus,
+                'to_status' => Project::STATUS_UNDER_ADMIN_FINANCE_REVIEW,
+                'action' => 'started_admin_finance_review',
+                'from_department_id' => $afinDeptId,
+                'to_department_id' => $afinDeptId,
+                'acted_by' => $actorId,
+                'notes' => 'Admin Finance received and started reviewing the Project Management approved project for JOM issuance.',
+            ]);
+
+            ActivityLogger::log(
+                'project.received_by_admin_finance',
+                'project',
+                $projectId,
+                "Admin Finance user '{$actor['full_name']}' received and started reviewing project '{$project['project_code']}' ({$project['project_name']}) for JOM number issuance.",
+                $request,
+                $actorId,
+                false
+            );
+
+            return ['success' => true];
+        });
+    }
+
+    /**
+     * Authorize and issue official JOM (Job Order Memorandum) number by Admin Finance (or Administrator).
+     * Admin Finance is the ONLY department responsible for issuing JOM numbers.
      * Enforces uniqueness, transaction safety, and idempotency.
      *
      * @param array<string, mixed> $project
@@ -829,10 +1050,17 @@ final class ProjectService
         array $actor,
         Request $request
     ): array {
+        if (!AuthorizationService::isAdmin($actor) && !AuthorizationService::isAdminFinanceUser($actor)) {
+            return [
+                'success' => false,
+                'error' => 'Only Admin Finance is authorized to issue JOM numbers.',
+            ];
+        }
+
         if (!AuthorizationService::canIssueJomNumber($actor, $project)) {
             return [
                 'success' => false,
-                'error' => 'You do not have permission to issue a JOM number for this project, or the project is not in verified status.',
+                'error' => 'You do not have permission to issue a JOM number for this project, or the project has not been approved and forwarded by Project Management.',
             ];
         }
 
@@ -865,12 +1093,11 @@ final class ProjectService
             }
 
             $currentStatus = (string) $locked['status'];
-            $vStatus = (string) $locked['verification_status'];
 
-            if ($currentStatus !== Project::STATUS_VERIFICATION_COMPLETED && $vStatus !== Project::VERIFICATION_VERIFIED) {
+            if (!Project::isApprovedByPm($locked) || !Project::isForwardedToAdminFinance($locked)) {
                 return [
                     'success' => false,
-                    'error' => 'Cannot issue JOM number: document verification must be completed first.',
+                    'error' => 'Cannot issue JOM number: project must be approved and forwarded by Project Management to Admin Finance first.',
                 ];
             }
 
@@ -893,7 +1120,7 @@ final class ProjectService
                 'from_department_id' => $locked['current_department_id'],
                 'to_department_id' => $locked['current_department_id'],
                 'acted_by' => $actorId,
-                'notes' => "Official Job Order Memorandum Number '{$jomNumber}' issued by Project Management. Authorized for downstream execution.",
+                'notes' => "Official Job Order Memorandum Number '{$jomNumber}' issued by Admin Finance ({$actor['full_name']}). Ready to forward JOM, SLD, and Marketing BOM to Operations.",
             ]);
 
             // Activity Log
@@ -901,7 +1128,7 @@ final class ProjectService
                 'project.jom_issued',
                 'project',
                 $projectId,
-                "Project Management reviewer '{$actor['full_name']}' issued JOM number '{$jomNumber}' for project '{$locked['project_code']}' ({$locked['project_name']}).",
+                "Admin Finance user '{$actor['full_name']}' (ID #{$actorId}) issued JOM number '{$jomNumber}' for project '{$locked['project_code']}' ({$locked['project_name']}, ID #{$projectId}).",
                 $request,
                 $actorId,
                 false
@@ -915,7 +1142,7 @@ final class ProjectService
                     'project.jom_issued',
                     "JOM Number Issued: {$jomNumber} ({$locked['project_code']})",
                     sprintf(
-                        "Project '%s' (%s) was officially issued JOM Number %s by Project Management (%s).",
+                        "Project '%s' (%s) was officially issued JOM Number %s by Admin Finance (%s).",
                         $locked['project_name'],
                         $locked['project_code'],
                         $jomNumber,
@@ -925,10 +1152,227 @@ final class ProjectService
                 );
             }
 
+            // Notify Project Management users
+            $pmDept = Department::findByCode(Department::CODE_PROJECT_MANAGEMENT);
+            if ($pmDept !== null) {
+                Notification::notifyDepartmentUsers(
+                    (int) $pmDept['id'],
+                    $projectId,
+                    'project.jom_issued',
+                    "JOM Number Issued: {$jomNumber} ({$locked['project_code']})",
+                    sprintf(
+                        "Admin Finance (%s) issued JOM Number %s for approved project '%s' (%s).",
+                        $actor['full_name'] ?? $actor['username'],
+                        $jomNumber,
+                        $locked['project_name'],
+                        $locked['project_code']
+                    ),
+                    '/projects/' . $projectId
+                );
+            }
+
             return [
                 'success' => true,
                 'jom_number' => $jomNumber,
             ];
+        });
+    }
+
+    /**
+     * Forward JOM Number, SLD, and Marketing BOM from Admin Finance to Operations.
+     * Confirms all 3 items are present and readable, associates SLD and Marketing BOM document IDs
+     * with the project and JOM, records sender and receiving department (OPS) + timestamp,
+     * prevents duplicate forwarding, and notifies Operations.
+     *
+     * @param array<string, mixed> $project
+     * @param array<string, mixed> $input
+     * @param array<string, mixed> $actor
+     * @return array{success: bool, error?: string}
+     */
+    public static function forwardToOperations(
+        array $project,
+        array $input,
+        array $actor,
+        Request $request
+    ): array {
+        if (!AuthorizationService::canForwardToOperations($actor, $project)) {
+            return [
+                'success' => false,
+                'error' => 'You do not have permission to forward this project to Operations, or the project has not been issued a JOM number or was already forwarded.',
+            ];
+        }
+
+        $projectId = (int) $project['id'];
+        $actorId = (int) $actor['id'];
+
+        $forwardNotes = trim((string) ($input['operations_forward_notes'] ?? $input['forward_notes'] ?? ''));
+        if (mb_strlen($forwardNotes, 'UTF-8') > 2000) {
+            return [
+                'success' => false,
+                'error' => 'Forwarding notes must not exceed 2,000 characters.',
+            ];
+        }
+
+        // Verify all 3 required handoff items: 1. JOM Number, 2. SLD, 3. Marketing BOM
+        $jomNumber = trim((string) ($project['jom_number'] ?? ''));
+        if ($jomNumber === '') {
+            return [
+                'success' => false,
+                'error' => 'Cannot forward to Operations: JOM number must be issued by Admin Finance first.',
+            ];
+        }
+
+        $handoffDocs = ProjectDocument::operationsHandoffDocuments($projectId);
+        $sldDoc = $handoffDocs['sld'];
+        $bomDoc = $handoffDocs['marketing_bom'];
+
+        if (!$handoffDocs['is_ready'] || $sldDoc === null || $bomDoc === null) {
+            return [
+                'success' => false,
+                'error' => 'Cannot forward to Operations: Missing required handoff document(s): ' . implode(', ', $handoffDocs['missing']) . '.',
+            ];
+        }
+
+        if (
+            DocumentStorageService::resolveVerifiedPath($sldDoc) === null
+            || DocumentStorageService::resolveVerifiedPath($bomDoc) === null
+        ) {
+            return [
+                'success' => false,
+                'error' => 'Cannot forward to Operations: One or more required handoff document files (SLD or Marketing BOM) could not be verified on disk.',
+            ];
+        }
+
+        $opsDept = Department::findByCode(Department::CODE_OPERATIONS);
+        if ($opsDept === null) {
+            return [
+                'success' => false,
+                'error' => 'Operations department configuration is missing.',
+            ];
+        }
+
+        $afinDept = Department::findByCode(Department::CODE_ADMIN_FINANCE);
+        $opsDeptId = (int) $opsDept['id'];
+        $afinDeptId = $afinDept !== null ? (int) $afinDept['id'] : ($project['current_department_id'] ? (int) $project['current_department_id'] : null);
+
+        $sldSummary = sprintf('SLD (%s, v%d)', $sldDoc['original_filename'], (int) $sldDoc['version_number']);
+        $bomSummary = sprintf('Marketing BOM (%s, v%d)', $bomDoc['original_filename'], (int) $bomDoc['version_number']);
+        $notesText = $forwardNotes !== ''
+            ? $forwardNotes
+            : "Admin Finance forwarded JOM Number '{$jomNumber}', {$sldSummary}, and {$bomSummary} to Operations.";
+
+        return Database::transaction(static function () use (
+            $projectId,
+            $opsDeptId,
+            $afinDeptId,
+            $actorId,
+            $actor,
+            $sldDoc,
+            $bomDoc,
+            $sldSummary,
+            $bomSummary,
+            $notesText,
+            $request
+        ): array {
+            $stmt = Database::connection()->prepare('SELECT * FROM projects WHERE id = :id FOR UPDATE');
+            $stmt->execute(['id' => $projectId]);
+            $locked = $stmt->fetch();
+
+            if (!$locked) {
+                return ['success' => false, 'error' => 'Project record not found.'];
+            }
+
+            if (Project::isForwardedToOperations($locked)) {
+                return [
+                    'success' => false,
+                    'error' => 'This project has already been forwarded to Operations. Duplicate forwarding is prevented.',
+                ];
+            }
+
+            if (empty($locked['jom_number'])) {
+                return [
+                    'success' => false,
+                    'error' => 'Cannot forward to Operations before JOM number issuance.',
+                ];
+            }
+
+            $fromStatus = (string) $locked['status'];
+            $jomNumber = (string) $locked['jom_number'];
+
+            $forwarded = Project::markForwardedToOperations(
+                $projectId,
+                $opsDeptId,
+                $actorId,
+                (int) $sldDoc['id'],
+                (int) $bomDoc['id'],
+                $notesText
+            );
+
+            if (!$forwarded) {
+                return [
+                    'success' => false,
+                    'error' => 'This project has already been forwarded to Operations.',
+                ];
+            }
+
+            ProjectWorkflowHistory::record([
+                'project_id' => $projectId,
+                'from_status' => $fromStatus,
+                'to_status' => Project::STATUS_FORWARDED_TO_OPERATIONS,
+                'action' => 'forwarded_to_operations',
+                'from_department_id' => $afinDeptId,
+                'to_department_id' => $opsDeptId,
+                'acted_by' => $actorId,
+                'notes' => $notesText,
+                'flagged_documents' => json_encode(['SLD', 'BOM']),
+            ]);
+
+            // Notify Operations incoming queue users
+            Notification::notifyDepartmentUsers(
+                $opsDeptId,
+                $projectId,
+                'project.forwarded_to_operations',
+                "Forwarded to Operations: {$jomNumber} ({$locked['project_code']})",
+                sprintf(
+                    "Admin Finance (%s) forwarded project '%s' (%s) with JOM Number %s, %s, and %s to Operations.",
+                    $actor['full_name'] ?? $actor['username'],
+                    $locked['project_name'],
+                    $locked['project_code'],
+                    $jomNumber,
+                    $sldSummary,
+                    $bomSummary
+                ),
+                '/projects/' . $projectId
+            );
+
+            // Notify origin Marketing team
+            if (!empty($locked['origin_department_id'])) {
+                Notification::notifyDepartmentUsers(
+                    (int) $locked['origin_department_id'],
+                    $projectId,
+                    'project.forwarded_to_operations',
+                    "Forwarded to Operations: {$jomNumber} ({$locked['project_code']})",
+                    sprintf(
+                        "Project '%s' (%s, JOM: %s) and its SLD & Marketing BOM were forwarded by Admin Finance to Operations.",
+                        $locked['project_name'],
+                        $locked['project_code'],
+                        $jomNumber
+                    ),
+                    '/projects/' . $projectId
+                );
+            }
+
+            ActivityLogger::log(
+                'project.forwarded_to_operations',
+                'project',
+                $projectId,
+                "Admin Finance user '{$actor['full_name']}' forwarded project '{$locked['project_code']}' (JOM: '{$jomNumber}') along with {$sldSummary} [doc #{$sldDoc['id']}] and {$bomSummary} [doc #{$bomDoc['id']}] from Admin Finance (ADMFIN) to receiving department Operations (OPS).",
+                $request,
+                $actorId,
+                false
+            );
+
+            return ['success' => true];
         });
     }
 
