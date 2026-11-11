@@ -25,11 +25,13 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
 
         <select id="status" name="status" class="form-select form-select-sm bms-toolbar-select" aria-label="Filter by verification status">
             <option value="">All Verification Statuses</option>
-            <option value="pending" <?= in_array($filters['status'] ?? '', ['pending', 'awaiting'], true) ? 'selected' : '' ?>>Pending Verification</option>
+            <option value="pending" <?= in_array($filters['status'] ?? '', ['pending', 'awaiting'], true) ? 'selected' : '' ?>>Incoming / Pending Verification</option>
+            <option value="verification_queue" <?= in_array($filters['status'] ?? '', ['verification_queue', 'pm_queue'], true) ? 'selected' : '' ?>>Document Verification Queue</option>
             <option value="under_review" <?= ($filters['status'] ?? '') === 'under_review' ? 'selected' : '' ?>>Under Review</option>
             <option value="returned" <?= ($filters['status'] ?? '') === 'returned' ? 'selected' : '' ?>>Returned to Marketing</option>
             <option value="resubmitted" <?= ($filters['status'] ?? '') === 'resubmitted' ? 'selected' : '' ?>>Resubmitted for Verification</option>
             <option value="approved" <?= in_array($filters['status'] ?? '', ['approved', 'completed', 'verified'], true) ? 'selected' : '' ?>>Approved by Project Management</option>
+            <option value="ready_for_admin_finance" <?= in_array($filters['status'] ?? '', ['ready_for_admin_finance', 'ready_forward'], true) ? 'selected' : '' ?>>Ready for Admin Finance</option>
             <option value="forwarded_to_admin_finance" <?= in_array($filters['status'] ?? '', ['forwarded_to_admin_finance', 'forwarded'], true) ? 'selected' : '' ?>>Forwarded to Admin Finance</option>
         </select>
 
@@ -62,14 +64,14 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
         <table class="table mb-0">
             <thead>
                 <tr>
-                    <th>Project Name</th>
-                    <th>Client</th>
-                    <th>Code / JOM</th>
-                    <th>Submission Date</th>
-                    <th>Submitted By</th>
-                    <th>Verification Status</th>
-                    <th>Last Updated</th>
-                    <th class="text-end">Action</th>
+                    <th style="width: 22%; min-width: 180px;">Project Name</th>
+                    <th style="width: 13%; min-width: 110px;">Client</th>
+                    <th style="width: 11%; min-width: 100px;">Code / JOM</th>
+                    <th style="width: 11%; min-width: 100px;">Submission Date</th>
+                    <th style="width: 11%; min-width: 100px;">Submitted By</th>
+                    <th style="width: 14%; min-width: 130px;">Verification Status</th>
+                    <th style="width: 10%; min-width: 95px;">Last Updated</th>
+                    <th class="text-end" style="width: 8%; min-width: 80px;">Action</th>
                 </tr>
             </thead>
             <tbody>
@@ -90,32 +92,34 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
                         ?>
                         <tr>
                             <td>
-                                <a href="<?= url('/projects/' . $pId) ?>" class="fw-semibold text-dark text-decoration-none">
+                                <a href="<?= url('/projects/' . $pId) ?>" class="fw-semibold text-dark text-decoration-none text-truncate d-block" title="<?= e($proj['project_name']) ?>">
                                     <?= e($proj['project_name']) ?>
                                 </a>
                                 <?php if (!empty($proj['project_location'])): ?>
-                                    <div class="text-secondary small"><?= e($proj['project_location']) ?></div>
+                                    <div class="text-secondary small text-truncate"><?= e($proj['project_location']) ?></div>
                                 <?php endif; ?>
                             </td>
-                            <td><?= e($proj['client_name']) ?></td>
                             <td>
-                                <span class="font-monospace small fw-medium"><?= e($proj['project_code']) ?></span>
+                                <div class="text-truncate" title="<?= e($proj['client_name']) ?>"><?= e($proj['client_name']) ?></div>
+                            </td>
+                            <td class="font-monospace small">
+                                <div class="text-truncate"><?= e($proj['project_code']) ?></div>
                                 <?php if (!empty($proj['jom_number'])): ?>
-                                    <div><span class="badge bg-primary font-monospace" style="font-size: 0.72rem;"><?= e($proj['jom_number']) ?></span></div>
+                                    <div><span class="badge bg-primary font-monospace"><?= e($proj['jom_number']) ?></span></div>
                                 <?php endif; ?>
                             </td>
-                            <td class="small text-nowrap"><?= format_datetime($proj['submitted_at'] ?? null) ?></td>
                             <td class="small">
-                                <?php if (!empty($proj['submitter_name'])): ?>
-                                    <?= e($proj['submitter_name']) ?>
-                                <?php else: ?>
-                                    <span class="text-secondary"><?= e($proj['creator_name']) ?></span>
-                                <?php endif; ?>
+                                <div class="text-nowrap"><?= format_datetime($proj['submitted_at'] ?? null) ?></div>
+                            </td>
+                            <td class="small">
+                                <div class="text-truncate"><?= e(!empty($proj['submitter_name']) ? $proj['submitter_name'] : ($proj['creator_name'] ?? '—')) ?></div>
                             </td>
                             <td>
                                 <span class="badge <?= project_status_badge_class($pStatus) ?>"><?= e($pStatus) ?></span>
                             </td>
-                            <td class="small text-secondary text-nowrap"><?= format_datetime($proj['updated_at'] ?? $proj['created_at']) ?></td>
+                            <td class="small text-secondary">
+                                <div class="text-nowrap"><?= format_datetime($proj['updated_at'] ?? $proj['created_at']) ?></div>
+                            </td>
                             <td class="text-end text-nowrap">
                                 <div class="bms-action-group">
                                     <a href="<?= url('/projects/' . $pId) ?>"

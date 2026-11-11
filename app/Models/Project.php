@@ -1104,14 +1104,30 @@ final class Project
         }
 
         $status = trim((string) ($filters['status'] ?? ''));
-        if ($status === 'awaiting_jom' || $status === 'awaiting') {
+        if ($status === 'incoming_approved') {
+            $conditions[] = "(p.status = 'Forwarded to Admin Finance' AND p.jom_number IS NULL)";
+        } elseif ($status === 'awaiting_jom' || $status === 'awaiting') {
             $conditions[] = "(p.jom_number IS NULL AND p.status IN ('Forwarded to Admin Finance', 'Under Admin Finance Review'))";
         } elseif ($status === 'under_review' || $status === 'under_afin_review') {
             $conditions[] = "p.status = 'Under Admin Finance Review'";
         } elseif ($status === 'jom_issued') {
             $conditions[] = "(p.jom_number IS NOT NULL AND p.status IN ('JOM Issued', 'JOM Number Issued'))";
+        } elseif ($status === 'ready_for_operations' || $status === 'ready_ops') {
+            $conditions[] = "(p.jom_number IS NOT NULL AND p.forwarded_to_ops_at IS NULL AND p.status IN ('JOM Issued', 'JOM Number Issued'))";
         } elseif ($status === 'forwarded_to_operations' || $status === 'forwarded_ops') {
             $conditions[] = "(p.status = 'Forwarded to Operations' OR p.forwarded_to_ops_at IS NOT NULL)";
+        } elseif ($status === 'actual_bom_submitted' || $status === 'actual_bom_incoming') {
+            $conditions[] = "p.status = 'Actual BOM Submitted to Admin Finance'";
+        } elseif ($status === 'actual_bom_under_review') {
+            $conditions[] = "p.status = 'Actual BOM Under Admin Finance Review'";
+        } elseif ($status === 'actual_bom_returned') {
+            $conditions[] = "p.status = 'Actual BOM Returned for Corrections'";
+        } elseif ($status === 'actual_bom_accepted') {
+            $conditions[] = "p.status = 'Actual BOM Accepted by Admin Finance'";
+        } elseif ($status === 'po_records' || $status === 'has_po') {
+            $conditions[] = "p.id IN (SELECT po_sub.project_id FROM purchase_orders po_sub)";
+        } elseif ($status === 'po_issued') {
+            $conditions[] = "p.id IN (SELECT po_sub.project_id FROM purchase_orders po_sub WHERE po_sub.status IN ('Issued to Supplier', 'Partially Received', 'Fully Received'))";
         } elseif ($status !== '' && in_array($status, self::availableStatuses(), true)) {
             $conditions[] = 'p.status = :status';
             $params['status'] = $status;
@@ -1280,12 +1296,16 @@ final class Project
         $status = trim((string) ($filters['status'] ?? ''));
         if ($status === 'awaiting' || $status === 'pending') {
             $conditions[] = "p.status IN ('Submitted for Document Verification', 'Submitted for Verification', 'Submitted')";
+        } elseif ($status === 'verification_queue' || $status === 'pm_queue') {
+            $conditions[] = "p.status IN ('Submitted for Document Verification', 'Submitted for Verification', 'Submitted', 'Resubmitted for Verification')";
         } elseif ($status === 'under_review') {
             $conditions[] = "p.status = 'Under Review'";
         } elseif ($status === 'returned') {
             $conditions[] = "p.status IN ('Returned for Corrections', 'Returned to Marketing for Corrections')";
         } elseif ($status === 'resubmitted') {
             $conditions[] = "p.status = 'Resubmitted for Verification'";
+        } elseif ($status === 'ready_for_admin_finance' || $status === 'ready_forward') {
+            $conditions[] = "(p.status IN ('Approved by Project Management', 'Document Verification Completed') AND p.forwarded_to_afin_at IS NULL)";
         } elseif (in_array($status, ['approved', 'completed', 'verified'], true)) {
             $conditions[] = "(p.status IN ('Approved by Project Management', 'Document Verification Completed') OR (p.verification_status IN ('verified_complete', 'approved_by_pm') AND p.status != 'Forwarded to Admin Finance'))";
         } elseif (in_array($status, ['forwarded_to_admin_finance', 'forwarded'], true)) {

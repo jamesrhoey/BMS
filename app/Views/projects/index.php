@@ -53,36 +53,42 @@ $totalProjectsCount = count($projects);
         <table class="table mb-0">
             <thead>
                 <tr>
-                    <th>Internal Code</th>
-                    <th>Project Name</th>
-                    <th>Client</th>
-                    <th>Current Department</th>
-                    <th>Status</th>
-                    <th>Created By</th>
-                    <th>Created At &darr;</th>
-                    <th class="text-end">Action</th>
+                    <th style="width: 12%; min-width: 110px;">Internal Code</th>
+                    <th style="width: 25%; min-width: 200px;">Project Name</th>
+                    <th style="width: 13%; min-width: 110px;">Client</th>
+                    <th style="width: 15%; min-width: 130px;">Current Department</th>
+                    <th style="width: 13%; min-width: 110px;">Status</th>
+                    <th style="width: 10%; min-width: 90px;">Created By</th>
+                    <th style="width: 7%; min-width: 85px;">Created At &darr;</th>
+                    <th class="text-end" style="width: 5%; min-width: 60px;">Action</th>
                 </tr>
             </thead>
             <tbody>
                 <?php if ($projects === []): ?>
                     <tr>
-                        <td colspan="8" class="text-center text-secondary py-4">No projects match the selected criteria.</td>
+                        <td colspan="8" class="text-center text-secondary py-4 small">No projects match the selected criteria.</td>
                     </tr>
                 <?php else: ?>
                     <?php foreach ($projects as $proj): ?>
                         <tr>
-                            <td class="font-monospace small fw-semibold"><?= e($proj['project_code']) ?></td>
+                            <td class="font-monospace small fw-semibold">
+                                <div class="text-truncate"><?= e($proj['project_code']) ?></div>
+                            </td>
                             <td>
-                                <div class="fw-semibold"><?= e($proj['project_name']) ?></div>
+                                <a href="<?= url('/projects/' . (int) $proj['id']) ?>" class="fw-semibold text-dark text-decoration-none text-truncate d-block" title="<?= e($proj['project_name']) ?>">
+                                    <?= e($proj['project_name']) ?>
+                                </a>
                                 <?php if (!empty($proj['project_location'])): ?>
-                                    <div class="text-secondary small"><?= e($proj['project_location']) ?></div>
+                                    <div class="text-secondary small text-truncate"><?= e($proj['project_location']) ?></div>
                                 <?php endif; ?>
                             </td>
-                            <td><?= e($proj['client_name']) ?></td>
+                            <td>
+                                <div class="text-truncate" title="<?= e($proj['client_name']) ?>"><?= e($proj['client_name']) ?></div>
+                            </td>
                             <td>
                                 <?php if (!empty($proj['current_department_name'])): ?>
-                                    <?= e($proj['current_department_name']) ?>
-                                    <span class="text-secondary small">(<?= e($proj['current_department_code']) ?>)</span>
+                                    <div class="text-truncate"><?= e($proj['current_department_name']) ?></div>
+                                    <div class="text-secondary small text-truncate">(<?= e($proj['current_department_code']) ?>)</div>
                                 <?php else: ?>
                                     <span class="text-secondary small">Unassigned</span>
                                 <?php endif; ?>
@@ -90,9 +96,13 @@ $totalProjectsCount = count($projects);
                             <td>
                                 <span class="badge <?= project_status_badge_class((string) $proj['status']) ?>"><?= e($proj['status']) ?></span>
                             </td>
-                            <td class="small"><?= e($proj['creator_name']) ?></td>
-                            <td class="small text-secondary"><?= format_datetime($proj['created_at']) ?></td>
-                            <td class="text-end">
+                            <td class="small">
+                                <div class="text-truncate"><?= e($proj['creator_name']) ?></div>
+                            </td>
+                            <td class="small text-secondary">
+                                <div class="text-nowrap"><?= format_datetime($proj['created_at']) ?></div>
+                            </td>
+                            <td class="text-end text-nowrap">
                                 <div class="bms-action-group">
                                     <a href="<?= url('/projects/' . (int) $proj['id']) ?>"
                                        class="bms-action-icon bms-action-icon--primary"

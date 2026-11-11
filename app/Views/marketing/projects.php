@@ -75,19 +75,19 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
         <table class="table mb-0">
             <thead>
                 <tr>
-                    <th>Project Code</th>
-                    <th>Project &amp; Client</th>
-                    <th>Current Dept</th>
-                    <th>Document Checklist</th>
-                    <th>Workflow Status</th>
-                    <th>Created <?= ($filters['sort'] ?? 'newest') === 'oldest' ? '&uarr;' : '&darr;' ?></th>
-                    <th class="text-end">Action</th>
+                    <th style="width: 12%; min-width: 110px;">Project Code</th>
+                    <th style="width: 28%; min-width: 220px;">Project &amp; Client</th>
+                    <th style="width: 15%; min-width: 130px;">Current Dept</th>
+                    <th style="width: 15%; min-width: 140px;">Document Checklist</th>
+                    <th style="width: 13%; min-width: 120px;">Workflow Status</th>
+                    <th style="width: 9%; min-width: 95px;">Created <?= ($filters['sort'] ?? 'newest') === 'oldest' ? '&uarr;' : '&darr;' ?></th>
+                    <th class="text-end" style="width: 8%; min-width: 80px;">Action</th>
                 </tr>
             </thead>
             <tbody>
                 <?php if ($projects === []): ?>
                     <tr>
-                        <td colspan="7" class="text-center text-secondary py-4">No Marketing projects match your current search or filter criteria.</td>
+                        <td colspan="7" class="text-center text-secondary py-4 small">No Marketing projects match your current search or filter criteria.</td>
                     </tr>
                 <?php else: ?>
                     <?php foreach ($projects as $proj): ?>
@@ -103,48 +103,48 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
                         ?>
                         <tr class="<?= $status === 'Returned for Corrections' ? 'checklist-row-attention' : '' ?>">
                             <td class="font-monospace small fw-semibold">
-                                <?= e($proj['project_code']) ?>
+                                <div class="text-truncate"><?= e($proj['project_code']) ?></div>
                                 <?php if (!empty($proj['jom_number'])): ?>
-                                    <div><span class="badge bg-primary font-monospace" style="font-size: 0.72rem;"><?= e($proj['jom_number']) ?></span></div>
+                                    <div><span class="badge bg-primary font-monospace"><?= e($proj['jom_number']) ?></span></div>
                                 <?php endif; ?>
                             </td>
                             <td>
-                                <div class="fw-semibold"><?= e($proj['project_name']) ?></div>
-                                <div class="small text-secondary">
+                                <div class="fw-semibold text-truncate" title="<?= e($proj['project_name']) ?>"><?= e($proj['project_name']) ?></div>
+                                <div class="small text-secondary text-truncate" title="Client: <?= e($proj['client_name']) ?><?= !empty($proj['project_location']) ? ' • ' . e($proj['project_location']) : '' ?><?= ($status === 'Returned for Corrections' && !empty($proj['return_reason'])) ? ' • Note: ' . e($proj['return_reason']) : '' ?>">
                                     Client: <strong><?= e($proj['client_name']) ?></strong>
                                     <?php if (!empty($proj['project_location'])): ?>
                                         &bull; <?= e($proj['project_location']) ?>
                                     <?php endif; ?>
                                 </div>
-                                <?php if ($status === 'Returned for Corrections' && !empty($proj['return_reason'])): ?>
-                                    <div class="mt-1 small text-danger">
-                                        <strong>PM Return Note:</strong> <?= e($proj['return_reason']) ?>
-                                    </div>
-                                <?php endif; ?>
                             </td>
                             <td>
                                 <?php if (!empty($proj['current_department_code'])): ?>
-                                    <span class="badge badge-soft-secondary"><?= e($proj['current_department_code']) ?></span>
-                                    <div class="small text-secondary mt-1"><?= e($proj['current_department_name']) ?></div>
+                                    <div class="d-flex align-items-center gap-1 text-truncate">
+                                        <span class="badge badge-soft-secondary"><?= e($proj['current_department_code']) ?></span>
+                                        <span class="small text-secondary text-truncate"><?= e($proj['current_department_name']) ?></span>
+                                    </div>
                                 <?php else: ?>
                                     <span class="text-secondary small">Unassigned</span>
                                 <?php endif; ?>
                             </td>
                             <td>
                                 <?php if ($isComplete): ?>
-                                    <span class="badge badge-soft-success"><?= $uploadedReq ?>/<?= $requiredCnt ?> Complete</span>
-                                    <div class="text-secondary" style="font-size: 0.74rem;">Ready / Uploaded</div>
+                                    <div class="text-truncate"><span class="badge badge-soft-success"><?= $uploadedReq ?>/<?= $requiredCnt ?> Complete</span></div>
+                                    <div class="text-secondary small text-truncate">Ready / Uploaded</div>
                                 <?php else: ?>
-                                    <span class="badge badge-soft-warning"><?= $uploadedReq ?>/<?= $requiredCnt ?> Uploaded</span>
-                                    <div class="text-danger" style="font-size: 0.74rem;"><?= max(0, $requiredCnt - $uploadedReq) ?> required missing</div>
+                                    <div class="text-truncate"><span class="badge badge-soft-warning"><?= $uploadedReq ?>/<?= $requiredCnt ?> Uploaded</span></div>
+                                    <div class="text-danger small text-truncate"><?= max(0, $requiredCnt - $uploadedReq) ?> required missing</div>
                                 <?php endif; ?>
                             </td>
                             <td>
-                                <span class="badge <?= project_status_badge_class($status) ?>"><?= e($status) ?></span>
+                                <div class="text-truncate"><span class="badge <?= project_status_badge_class($status) ?>"><?= e($status) ?></span></div>
+                                <?php if ($status === 'Returned for Corrections' && !empty($proj['return_reason'])): ?>
+                                    <div class="text-danger small text-truncate" title="PM Note: <?= e($proj['return_reason']) ?>">Note: <?= e($proj['return_reason']) ?></div>
+                                <?php endif; ?>
                             </td>
                             <td class="small text-secondary">
                                 <div><?= format_datetime($proj['created_at']) ?></div>
-                                <div style="font-size: 0.74rem;">By <?= e($proj['creator_name']) ?></div>
+                                <div class="text-truncate" style="font-size: 0.74rem;">By <?= e($proj['creator_name']) ?></div>
                             </td>
                             <td class="text-end">
                                 <div class="bms-action-group">
@@ -206,9 +206,9 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
                                     <?php endif; ?>
                                 </div>
                             </td>
-                        </tr>
+                       </tr>
                     <?php endforeach; ?>
-                <?php endif; ?>
+                 <?php endif; ?>
             </tbody>
         </table>
     </div>

@@ -58,33 +58,35 @@ $totalUsersCount = count($users);
         <table class="table mb-0">
             <thead>
                 <tr>
-                    <th>Full Name</th>
-                    <th>Username</th>
-                    <th>Role</th>
-                    <th>Department</th>
-                    <th>Status</th>
-                    <th>Last Login</th>
-                    <th class="text-end">Action</th>
+                    <th style="width: 25%; min-width: 180px;">Full Name</th>
+                    <th style="width: 14%; min-width: 110px;">Username</th>
+                    <th style="width: 14%; min-width: 110px;">Role</th>
+                    <th style="width: 18%; min-width: 130px;">Department</th>
+                    <th style="width: 10%; min-width: 85px;">Status</th>
+                    <th style="width: 11%; min-width: 95px;">Last Login</th>
+                    <th class="text-end" style="width: 8%; min-width: 75px;">Action</th>
                 </tr>
             </thead>
             <tbody>
                 <?php if ($users === []): ?>
                     <tr>
-                        <td colspan="7" class="text-center text-secondary py-4">No matching user accounts found.</td>
+                        <td colspan="7" class="text-center text-secondary py-4 small">No matching user accounts found.</td>
                     </tr>
                 <?php else: ?>
                     <?php foreach ($users as $u): ?>
                         <?php $isSelf = (int) ($currentUser['id'] ?? 0) === (int) $u['id']; ?>
                         <tr>
                             <td>
-                                <div class="fw-semibold"><?= e($u['full_name']) ?></div>
-                                <div class="text-secondary small"><?= e($u['email'] ?? 'No email') ?></div>
+                                <div class="fw-semibold text-truncate"><?= e($u['full_name']) ?></div>
+                                <div class="text-secondary small text-truncate"><?= e($u['email'] ?? 'No email') ?></div>
                             </td>
                             <td class="font-monospace small">
-                                <?= e($u['username']) ?>
-                                <?php if ($isSelf): ?>
-                                    <span class="badge bg-light text-secondary border ms-1">You</span>
-                                <?php endif; ?>
+                                <div class="text-truncate">
+                                    <?= e($u['username']) ?>
+                                    <?php if ($isSelf): ?>
+                                        <span class="badge bg-light text-secondary border ms-1">You</span>
+                                    <?php endif; ?>
+                                </div>
                             </td>
                             <td>
                                 <?php if (($u['role_slug'] ?? '') === 'administrator'): ?>
@@ -95,8 +97,8 @@ $totalUsersCount = count($users);
                             </td>
                             <td>
                                 <?php if (!empty($u['department_name'])): ?>
-                                    <?= e($u['department_name']) ?>
-                                    <span class="text-secondary small">(<?= e($u['department_code']) ?>)</span>
+                                    <div class="text-truncate"><?= e($u['department_name']) ?></div>
+                                    <div class="text-secondary small text-truncate">(<?= e($u['department_code']) ?>)</div>
                                 <?php else: ?>
                                     <span class="text-secondary small">System-Wide</span>
                                 <?php endif; ?>

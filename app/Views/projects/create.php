@@ -6,19 +6,6 @@ $checklistItems = $checklistDefinitions ?? [];
 ?>
 <div class="row justify-content-center">
     <div class="col-12 col-xl-9">
-        <div class="alert alert-light border small text-secondary mb-3">
-            <div class="fw-semibold text-dark mb-1">Marketing Workflow &amp; JOM Policy:</div>
-            <div>
-                Saving this form registers the project as a <strong>Draft</strong> without assigning a JOM number (JOM issuance belongs strictly to Project Management after document verification).
-                <?php if ($checklistItems !== []): ?>
-                    After saving, upload the <?= count($checklistItems) ?> standard Marketing documents:
-                    <?php foreach ($checklistItems as $def): ?>
-                        <span class="badge badge-soft-secondary ms-1"><?= e((string) ($def['code'] ?? $def['type'] ?? '')) ?></span>
-                    <?php endforeach; ?>
-                <?php endif; ?>
-            </div>
-        </div>
-
         <div class="bms-card p-4">
             <form method="POST" action="<?= url($targetAction) ?>" novalidate>
                 <?= csrf_field() ?>

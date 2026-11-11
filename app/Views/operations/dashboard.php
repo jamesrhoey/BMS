@@ -133,6 +133,7 @@ $prRequiresConfirmation = (bool) ($prConfig['requires_business_confirmation'] ??
             <option value="preparing_pr" <?= in_array(($filters['status'] ?? ''), ['preparing_pr', 'draft'], true) ? 'selected' : '' ?>>PRs Being Prepared (Draft)</option>
             <option value="submitted_pr" <?= in_array(($filters['status'] ?? ''), ['submitted_pr', 'pending'], true) ? 'selected' : '' ?>>PRs Submitted to OPS Finance (Pending)</option>
             <option value="returned" <?= ($filters['status'] ?? '') === 'returned' ? 'selected' : '' ?>>Returned for Revision</option>
+            <option value="rejected" <?= ($filters['status'] ?? '') === 'rejected' ? 'selected' : '' ?>>Rejected PRs</option>
             <option value="approved" <?= ($filters['status'] ?? '') === 'approved' ? 'selected' : '' ?>>Approved PRs</option>
             <option value="converted_po" <?= ($filters['status'] ?? '') === 'converted_po' ? 'selected' : '' ?>>Converted to PO / Ordered</option>
             <option value="awaiting_purchasing" <?= ($filters['status'] ?? '') === 'awaiting_purchasing' ? 'selected' : '' ?>>Awaiting Purchasing</option>
@@ -188,14 +189,14 @@ $prRequiresConfirmation = (bool) ($prConfig['requires_business_confirmation'] ??
         <table class="table mb-0">
             <thead>
                 <tr>
-                    <th>Project Name</th>
-                    <th>Client / End User</th>
-                    <th>JOM Number</th>
-                    <th>SLD</th>
-                    <th>Marketing BOM</th>
-                    <th>Purchase Request</th>
-                    <th>Date Received</th>
-                    <th class="text-end">Available Actions</th>
+                    <th style="width: 20%;">Project Name</th>
+                    <th style="width: 13%;">Client / End User</th>
+                    <th style="width: 10%;">JOM Number</th>
+                    <th style="width: 11%;">SLD</th>
+                    <th style="width: 11%;">Marketing BOM</th>
+                    <th style="width: 17%;">Purchase Request</th>
+                    <th style="width: 9%;">Date Received</th>
+                    <th class="text-end" style="width: 9%;">Available Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -220,12 +221,14 @@ $prRequiresConfirmation = (bool) ($prConfig['requires_business_confirmation'] ??
                         ?>
                         <tr>
                             <td>
-                                <a href="<?= url('/projects/' . $pId . '#operations-pr-panel') ?>" class="fw-semibold text-dark text-decoration-none">
+                                <a href="<?= url('/projects/' . $pId . '#operations-pr-panel') ?>" class="project-name text-decoration-none" title="<?= e($proj['project_name']) ?>">
                                     <?= e($proj['project_name']) ?>
                                 </a>
-                                <div class="small text-secondary font-monospace"><?= e($proj['project_code']) ?></div>
+                                <div class="cell-subtext font-monospace" title="<?= e($proj['project_code']) ?>"><?= e($proj['project_code']) ?></div>
                             </td>
-                            <td><?= e($proj['client_name']) ?></td>
+                            <td>
+                                <div class="cell-text" title="<?= e($proj['client_name']) ?>"><?= e($proj['client_name']) ?></div>
+                            </td>
                             <td>
                                 <?php if (!empty($proj['jom_number'])): ?>
                                     <span class="badge bg-primary font-monospace"><?= e($proj['jom_number']) ?></span>
@@ -233,60 +236,54 @@ $prRequiresConfirmation = (bool) ($prConfig['requires_business_confirmation'] ??
                                     <span class="text-secondary small">—</span>
                                 <?php endif; ?>
                             </td>
-                            <td class="small">
+                            <td>
                                 <?php if ($sldDocId > 0): ?>
-                                    <div class="fw-semibold text-truncate" style="max-width: 140px;" title="<?= e($proj['sld_filename'] ?? 'SLD') ?>">
+                                    <div class="cell-text fw-semibold" title="<?= e($proj['sld_filename'] ?? 'SLD') ?>">
                                         <?= e($proj['sld_filename'] ?? 'SLD Document') ?>
                                     </div>
-                                    <div class="d-flex gap-2 mt-1">
-                                        <a href="<?= url('/projects/' . $pId . '/documents/' . $sldDocId . '/view') ?>" class="text-primary text-decoration-none">View</a>
-                                        <a href="<?= url('/projects/' . $pId . '/documents/' . $sldDocId . '/download') ?>" class="text-secondary text-decoration-none">Download</a>
+                                    <div class="cell-subtext">
+                                        <a href="<?= url('/projects/' . $pId . '/documents/' . $sldDocId . '/view') ?>">View</a>
+                                        &bull;
+                                        <a href="<?= url('/projects/' . $pId . '/documents/' . $sldDocId . '/download') ?>" class="text-secondary">Download</a>
                                     </div>
                                 <?php else: ?>
-                                    <span class="text-secondary">Not linked</span>
+                                    <span class="text-secondary small">Not linked</span>
                                 <?php endif; ?>
                             </td>
-                            <td class="small">
+                            <td>
                                 <?php if ($bomDocId > 0): ?>
-                                    <div class="fw-semibold text-truncate" style="max-width: 140px;" title="<?= e($proj['bom_filename'] ?? 'Marketing BOM') ?>">
+                                    <div class="cell-text fw-semibold" title="<?= e($proj['bom_filename'] ?? 'Marketing BOM') ?>">
                                         <?= e($proj['bom_filename'] ?? 'Marketing BOM') ?>
                                     </div>
-                                    <div class="d-flex gap-2 mt-1">
-                                        <a href="<?= url('/projects/' . $pId . '/documents/' . $bomDocId . '/view') ?>" class="text-primary text-decoration-none">View</a>
-                                        <a href="<?= url('/projects/' . $pId . '/documents/' . $bomDocId . '/download') ?>" class="text-secondary text-decoration-none">Download</a>
+                                    <div class="cell-subtext">
+                                        <a href="<?= url('/projects/' . $pId . '/documents/' . $bomDocId . '/view') ?>">View</a>
+                                        &bull;
+                                        <a href="<?= url('/projects/' . $pId . '/documents/' . $bomDocId . '/download') ?>" class="text-secondary">Download</a>
                                     </div>
                                 <?php else: ?>
-                                    <span class="text-secondary">Not linked</span>
+                                    <span class="text-secondary small">Not linked</span>
                                 <?php endif; ?>
                             </td>
                             <td>
                                 <?php if ($prNumber !== ''): ?>
-                                    <div class="d-flex align-items-center gap-1 mb-1">
-                                        <span class="font-monospace fw-semibold"><?= e($prNumber) ?></span>
+                                    <div class="d-flex align-items-center gap-1">
+                                        <span class="font-monospace fw-semibold cell-text" style="max-width: 90px;"><?= e($prNumber) ?></span>
                                         <span class="badge <?= pr_status_badge_class($prStatus) ?>"><?= e($prStatus) ?></span>
                                     </div>
-                                    <div class="small text-secondary">
-                                        <?= $prItemsCount ?> item<?= $prItemsCount === 1 ? '' : 's' ?>
-                                        <?php if ($requesterName !== ''): ?>
-                                            &bull; Req: <?= e($requesterName) ?>
-                                        <?php endif; ?>
+                                    <div class="cell-subtext" title="<?= !empty($prPurpose) ? 'Purpose: ' . e($prPurpose) : '' ?>">
+                                        <?= $prItemsCount ?> item<?= $prItemsCount === 1 ? '' : 's' ?><?php if ($requesterName !== ''): ?> &bull; <?= e($requesterName) ?><?php endif; ?>
                                     </div>
-                                    <?php if ($prPurpose !== ''): ?>
-                                        <div class="small text-truncate text-secondary" style="max-width: 180px;" title="<?= e($prPurpose) ?>">
-                                            <em><?= e($prPurpose) ?></em>
-                                        </div>
-                                    <?php endif; ?>
                                 <?php else: ?>
                                     <span class="badge badge-soft-warning">Awaiting PR Preparation</span>
                                 <?php endif; ?>
                             </td>
-                            <td class="small text-nowrap">
-                                <?= format_datetime($proj['forwarded_to_ops_at'] ?? null) ?>
+                            <td class="text-nowrap">
+                                <div class="cell-subtext"><?= format_datetime($proj['forwarded_to_ops_at'] ?? null) ?></div>
                             </td>
                             <td class="text-end text-nowrap">
                                 <a href="<?= url('/projects/' . $pId . '#operations-pr-panel') ?>"
                                    class="btn btn-sm <?= $prNumber === '' || in_array($prStatus, ['Draft', 'Returned for Corrections', 'Returned for Revision'], true) ? 'btn-primary' : 'btn-outline-primary' ?>">
-                                    <?= $prNumber === '' ? 'Prepare PR' : (in_array($prStatus, ['Draft', 'Returned for Corrections', 'Returned for Revision'], true) ? 'Edit / Submit PR' : 'View Project & PR') ?>
+                                    <?= $prNumber === '' ? 'Prepare PR' : (in_array($prStatus, ['Draft', 'Returned for Corrections', 'Returned for Revision'], true) ? 'Edit PR' : 'View') ?>
                                 </a>
                             </td>
                         </tr>

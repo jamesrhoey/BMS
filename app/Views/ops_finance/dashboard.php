@@ -74,9 +74,16 @@ $abFormatPattern = (string) ($actualBomConfig['format'] ?? '{PREFIX}-{YEAR}{MONT
 
         <select id="status" name="status" class="form-select form-select-sm bms-toolbar-select" aria-label="Filter by OPS Finance status">
             <option value="">All Received PRs</option>
-            <option value="awaiting_review" <?= ($filters['status'] ?? '') === 'awaiting_review' ? 'selected' : '' ?>>PRs Awaiting Review</option>
-            <option value="pending_actual_bom" <?= ($filters['status'] ?? '') === 'pending_actual_bom' ? 'selected' : '' ?>>Actual BOM Pending Upload</option>
+            <option value="awaiting_review" <?= ($filters['status'] ?? '') === 'awaiting_review' ? 'selected' : '' ?>>Incoming PRs Awaiting Review</option>
+            <option value="under_review" <?= ($filters['status'] ?? '') === 'under_review' ? 'selected' : '' ?>>Pending PR Review</option>
+            <option value="returned_prs" <?= ($filters['status'] ?? '') === 'returned_prs' ? 'selected' : '' ?>>Returned PRs</option>
+            <option value="processed_prs" <?= ($filters['status'] ?? '') === 'processed_prs' ? 'selected' : '' ?>>Processed PRs</option>
+            <option value="pending_actual_bom" <?= ($filters['status'] ?? '') === 'pending_actual_bom' ? 'selected' : '' ?>>Actual BOM Preparation</option>
+            <option value="draft_bom" <?= ($filters['status'] ?? '') === 'draft_bom' ? 'selected' : '' ?>>Draft Actual BOMs</option>
+            <option value="all_boms" <?= ($filters['status'] ?? '') === 'all_boms' ? 'selected' : '' ?>>Actual BOM Records</option>
+            <option value="pending_submission" <?= ($filters['status'] ?? '') === 'pending_submission' ? 'selected' : '' ?>>Pending Submission to Admin Finance</option>
             <option value="submitted_to_afin" <?= ($filters['status'] ?? '') === 'submitted_to_afin' ? 'selected' : '' ?>>Actual BOM Submitted to Admin Finance</option>
+            <option value="returned_bom" <?= ($filters['status'] ?? '') === 'returned_bom' ? 'selected' : '' ?>>Returned Actual BOMs</option>
         </select>
 
         <select id="sort" name="sort" class="form-select form-select-sm bms-toolbar-select" aria-label="Sort by date">

@@ -58,6 +58,20 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
+    // Sidebar dropdown navigation groups (accessible toggle with keyboard and touch support)
+    var navDropdownToggles = document.querySelectorAll('[data-nav-toggle]');
+    navDropdownToggles.forEach(function (btn) {
+        btn.addEventListener('click', function (event) {
+            event.preventDefault();
+            var targetGroupId = btn.getAttribute('data-nav-toggle');
+            if (!targetGroupId) return;
+            var group = document.querySelector('[data-nav-group="' + targetGroupId + '"]');
+            if (!group) return;
+            var isOpen = group.classList.toggle('open');
+            btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        });
+    });
+
     // Confirmation prompts on sensitive forms (status changes, project submission, etc.)
     var confirmForms = document.querySelectorAll('form[data-confirm]');
     confirmForms.forEach(function (form) {

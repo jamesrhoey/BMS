@@ -1989,16 +1989,11 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
         <?php endif; ?>
 
         <!-- Phase 3: Purchase Order (PO) & Terms of Payment Panel -->
+        <?php if (!empty($purchaseOrders) || !empty($canCreatePo)): ?>
         <div id="purchase-order-panel" class="bms-card p-4 mb-4 border-start border-4 border-info">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
                 <div>
-                    <div class="d-flex align-items-center gap-2 mb-1">
-                        <span class="badge badge-soft-info">Admin Finance Purchasing</span>
-                        <h3 class="h6 fw-bold mb-0">Purchase Orders (PO) &amp; Terms of Payment</h3>
-                    </div>
-                    <div class="text-secondary small">
-                        Admin Finance creates official Purchase Orders referencing approved Purchase Requests with milestone Terms of Payment and supplier specifications.
-                    </div>
+                    <h3 class="h6 fw-bold mb-0">Purchase Orders (PO) &amp; Terms of Payment</h3>
                 </div>
                 <div>
                     <?php if (!empty($purchaseOrders)): ?>
@@ -2007,8 +2002,6 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
                         </span>
                     <?php elseif (!empty($canCreatePo)): ?>
                         <span class="badge badge-soft-success fs-6">PR Approved &bull; Ready for PO Creation</span>
-                    <?php else: ?>
-                        <span class="badge badge-soft-warning fs-6">Awaiting PR Approval</span>
                     <?php endif; ?>
                 </div>
             </div>
@@ -2313,23 +2306,26 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
                 </div>
             <?php endif; ?>
         </div>
+        <?php endif; ?>
 
         <!-- Phase 3: Supplier Delivery Tracking Panel -->
+        <?php
+        $receivablePos = array_filter($purchaseOrders, static function ($p) {
+            return in_array($p['status'], ['Issued to Supplier', 'Partially Received', 'Approved'], true);
+        });
+        ?>
+        <?php if (!empty($supplierDeliveries) || (!empty($canReceiveDelivery) && !empty($receivablePos))): ?>
         <div id="supplier-deliveries-panel" class="bms-card p-4 mb-4 border-start border-4 border-warning">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
                 <div>
-                    <div class="d-flex align-items-center gap-2 mb-1">
-                        <span class="badge badge-soft-warning">Logistics &amp; Operations</span>
-                        <h3 class="h6 fw-bold mb-0">Supplier Delivery Tracking</h3>
-                    </div>
-                    <div class="text-secondary small">
-                        Track incoming physical shipments against Purchase Orders, verify quantities delivered vs accepted, and monitor remaining balances.
-                    </div>
+                    <h3 class="h6 fw-bold mb-0">Supplier Delivery Tracking</h3>
                 </div>
                 <div>
-                    <span class="badge badge-soft-warning fs-6">
-                        <?= count($supplierDeliveries) ?> Shipment(s) Logged
-                    </span>
+                    <?php if (!empty($supplierDeliveries)): ?>
+                        <span class="badge badge-soft-warning fs-6">
+                            <?= count($supplierDeliveries) ?> Shipment(s) Logged
+                        </span>
+                    <?php endif; ?>
                 </div>
             </div>
 
@@ -2518,32 +2514,30 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
                 </div>
             <?php endif; ?>
         </div>
+        <?php endif; ?>
 
         <!-- Phase 3: Stock In & Serialized Inventory Units Panel (Section 5) -->
+        <?php
+        $readyDeliveries = array_filter($supplierDeliveries, static function ($d) {
+            return in_array($d['status'], ['Pending Inspection', 'Inspected', 'Discrepancy'], true);
+        });
+        ?>
+        <?php if (!empty($inventoryUnits) || !empty($inventoryTransactions) || (!empty($canExecuteStockIn) && !empty($readyDeliveries))): ?>
         <div id="inventory-stockin-panel" class="bms-card p-4 mb-4 border-start border-4 border-success">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
                 <div>
-                    <div class="d-flex align-items-center gap-2 mb-1">
-                        <span class="badge badge-soft-success">Warehouse &amp; Inventory</span>
-                        <h3 class="h6 fw-bold mb-0">Stock In &amp; Physical Inventory Tracking</h3>
-                    </div>
-                    <div class="text-secondary small">
-                        Execute official Stock In transactions to increment available inventory and register physical serialized units for warranty and site tracking.
-                    </div>
+                    <h3 class="h6 fw-bold mb-0">Stock In &amp; Physical Inventory Tracking</h3>
                 </div>
                 <div>
-                    <span class="badge badge-soft-success fs-6">
-                        <?= count($inventoryUnits) ?> Serialized Units In Stock
-                    </span>
+                    <?php if (!empty($inventoryUnits)): ?>
+                        <span class="badge badge-soft-success fs-6">
+                            <?= count($inventoryUnits) ?> Serialized Units In Stock
+                        </span>
+                    <?php endif; ?>
                 </div>
             </div>
 
             <!-- Execute Stock In Form (Matching Company Actual Form Fields) -->
-            <?php
-            $readyDeliveries = array_filter($supplierDeliveries, static function ($d) {
-                return in_array($d['status'], ['Pending Inspection', 'Inspected', 'Discrepancy'], true);
-            });
-            ?>
             <?php if (!empty($canExecuteStockIn) && !empty($readyDeliveries)): ?>
                 <?php $primaryDeliveryToStock = reset($readyDeliveries); ?>
                 <div class="p-3 bg-light rounded border mb-4">
@@ -2626,11 +2620,11 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
             <?php endif; ?>
 
             <!-- Registered Serialized Physical Units Table (Section 5) -->
-            <div class="mb-4">
-                <div class="small fw-bold text-dark text-uppercase tracking-wider mb-2">
-                    Registered Serialized Equipment in Inventory (<?= count($inventoryUnits) ?>)
-                </div>
-                <?php if (!empty($inventoryUnits)): ?>
+            <?php if (!empty($inventoryUnits)): ?>
+                <div class="mb-4">
+                    <div class="small fw-bold text-dark text-uppercase tracking-wider mb-2">
+                        Registered Serialized Equipment in Inventory (<?= count($inventoryUnits) ?>)
+                    </div>
                     <div class="table-responsive">
                         <table class="table table-sm table-bordered bg-white align-middle mb-0 font-sans small">
                             <thead class="table-light">
@@ -2667,12 +2661,8 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
                             </tbody>
                         </table>
                     </div>
-                <?php else: ?>
-                    <div class="p-3 bg-light rounded text-center text-secondary small fst-italic">
-                        No serialized equipment units registered yet. Complete Stock In from verified supplier deliveries to populate inventory.
-                    </div>
-                <?php endif; ?>
-            </div>
+                </div>
+            <?php endif; ?>
 
             <!-- Double-Entry Perpetual Ledger Transactions Table -->
             <?php if (!empty($inventoryTransactions)): ?>
@@ -2715,6 +2705,7 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
                 </div>
             <?php endif; ?>
         </div>
+        <?php endif; ?>
         <!-- Marketing Document Checklist -->
         <div id="checklist" class="bms-card mb-4">
             <div class="p-3 px-4 border-bottom">

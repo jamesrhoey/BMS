@@ -24,9 +24,16 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
 
         <select id="status" name="status" class="form-select form-select-sm bms-toolbar-select" aria-label="Filter by OPS Finance status">
             <option value="">All Received PRs</option>
-            <option value="awaiting_review" <?= ($filters['status'] ?? '') === 'awaiting_review' ? 'selected' : '' ?>>PRs Awaiting Review</option>
-            <option value="pending_actual_bom" <?= ($filters['status'] ?? '') === 'pending_actual_bom' ? 'selected' : '' ?>>Actual BOM Pending Upload</option>
+            <option value="awaiting_review" <?= ($filters['status'] ?? '') === 'awaiting_review' ? 'selected' : '' ?>>Incoming PRs Awaiting Review</option>
+            <option value="under_review" <?= ($filters['status'] ?? '') === 'under_review' ? 'selected' : '' ?>>Pending PR Review</option>
+            <option value="returned_prs" <?= ($filters['status'] ?? '') === 'returned_prs' ? 'selected' : '' ?>>Returned PRs</option>
+            <option value="processed_prs" <?= ($filters['status'] ?? '') === 'processed_prs' ? 'selected' : '' ?>>Processed PRs</option>
+            <option value="pending_actual_bom" <?= ($filters['status'] ?? '') === 'pending_actual_bom' ? 'selected' : '' ?>>Actual BOM Preparation</option>
+            <option value="draft_bom" <?= ($filters['status'] ?? '') === 'draft_bom' ? 'selected' : '' ?>>Draft Actual BOMs</option>
+            <option value="all_boms" <?= ($filters['status'] ?? '') === 'all_boms' ? 'selected' : '' ?>>Actual BOM Records</option>
+            <option value="pending_submission" <?= ($filters['status'] ?? '') === 'pending_submission' ? 'selected' : '' ?>>Pending Submission to Admin Finance</option>
             <option value="submitted_to_afin" <?= ($filters['status'] ?? '') === 'submitted_to_afin' ? 'selected' : '' ?>>Actual BOM Submitted to Admin Finance</option>
+            <option value="returned_bom" <?= ($filters['status'] ?? '') === 'returned_bom' ? 'selected' : '' ?>>Returned Actual BOMs</option>
         </select>
 
         <select id="sort" name="sort" class="form-select form-select-sm bms-toolbar-select" aria-label="Sort by date">
@@ -57,14 +64,14 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
         <table class="table mb-0">
             <thead>
                 <tr>
-                    <th>PR Number</th>
-                    <th>Project Name</th>
-                    <th>Client / End User</th>
-                    <th>JOM Number</th>
-                    <th>PR Status &amp; Items</th>
-                    <th>Actual BOM Status</th>
-                    <th>Submitted to Admin Finance</th>
-                    <th class="text-end">Available Actions</th>
+                    <th style="width: 12%; min-width: 110px;">PR Number</th>
+                    <th style="width: 20%; min-width: 180px;">Project Name</th>
+                    <th style="width: 12%; min-width: 110px;">Client / End User</th>
+                    <th style="width: 10%; min-width: 95px;">JOM Number</th>
+                    <th style="width: 14%; min-width: 130px;">PR Status &amp; Items</th>
+                    <th style="width: 14%; min-width: 130px;">Actual BOM Status</th>
+                    <th style="width: 9%; min-width: 85px;">Submitted to Afin</th>
+                    <th class="text-end" style="width: 9%; min-width: 85px;">Available Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -89,51 +96,50 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
                         <tr>
                             <td>
                                 <span class="font-monospace fw-semibold"><?= e($prNumber) ?></span>
-                                <div class="small text-secondary"><?= format_datetime($row['pr_submitted_at'] ?? null) ?></div>
-                                <?php if (!empty($row['pr_requester_name'])): ?>
-                                    <div class="text-secondary" style="font-size: 0.72rem;">by <?= e($row['pr_requester_name']) ?></div>
-                                <?php endif; ?>
+                                <div class="small text-secondary text-truncate"><?= format_datetime($row['pr_submitted_at'] ?? null) ?></div>
                             </td>
                             <td>
-                                <a href="<?= url('/projects/' . $pId . '#ops-finance-actual-bom-panel') ?>" class="fw-semibold text-dark text-decoration-none">
+                                <a href="<?= url('/projects/' . $pId . '#ops-finance-actual-bom-panel') ?>" class="fw-semibold text-dark text-decoration-none text-truncate d-block" title="<?= e($row['project_name']) ?>">
                                     <?= e($row['project_name']) ?>
                                 </a>
-                                <div class="small text-secondary font-monospace"><?= e($row['project_code']) ?></div>
+                                <div class="small text-secondary font-monospace text-truncate"><?= e($row['project_code']) ?></div>
                             </td>
-                            <td><?= e($row['client_name']) ?></td>
+                            <td>
+                                <div class="text-truncate" title="<?= e($row['client_name']) ?>"><?= e($row['client_name']) ?></div>
+                            </td>
                             <td>
                                 <span class="badge bg-primary font-monospace"><?= e($row['jom_number']) ?></span>
                             </td>
                             <td>
-                                <span class="badge <?= pr_status_badge_class($prStatus) ?>"><?= e($prStatus) ?></span>
-                                <div class="small text-secondary mt-1"><?= $prItemsCount ?> requested item<?= $prItemsCount === 1 ? '' : 's' ?></div>
+                                <div class="text-truncate"><span class="badge <?= pr_status_badge_class($prStatus) ?>"><?= e($prStatus) ?></span></div>
+                                <div class="small text-secondary text-truncate"><?= $prItemsCount ?> item<?= $prItemsCount === 1 ? '' : 's' ?></div>
                             </td>
                             <td>
                                 <?php if ($abNumber !== ''): ?>
-                                    <div>
+                                    <div class="d-flex align-items-center gap-1 text-truncate">
                                         <span class="font-monospace fw-semibold small"><?= e($abNumber) ?></span>
-                                        <span class="badge bg-light text-dark border ms-1">v<?= $abVersion ?></span>
-                                    </div>
-                                    <div class="mt-1">
                                         <span class="badge <?= actual_bom_status_badge_class($abStatus) ?>"><?= e($abStatus) ?></span>
                                     </div>
-                                    <?php if ($abDocId > 0): ?>
-                                        <div class="small mt-1">
-                                            <a href="<?= url('/projects/' . $pId . '/documents/' . $abDocId . '/view') ?>" class="text-primary text-decoration-none me-2">View BOM</a>
+                                    <div class="small text-truncate">
+                                        <?php if ($abDocId > 0): ?>
+                                            <a href="<?= url('/projects/' . $pId . '/documents/' . $abDocId . '/view') ?>" class="text-primary text-decoration-none">View</a>
+                                            <span class="text-secondary">&bull;</span>
                                             <a href="<?= url('/projects/' . $pId . '/documents/' . $abDocId . '/download') ?>" class="text-secondary text-decoration-none">Download</a>
-                                        </div>
-                                    <?php endif; ?>
+                                        <?php else: ?>
+                                            <span class="text-secondary">v<?= $abVersion ?></span>
+                                        <?php endif; ?>
+                                    </div>
                                 <?php else: ?>
-                                    <span class="badge badge-soft-warning">Actual BOM Pending Upload</span>
+                                    <span class="badge badge-soft-warning">Actual BOM Pending</span>
                                 <?php endif; ?>
                             </td>
                             <td class="small text-nowrap">
-                                <?= !empty($row['actual_bom_submitted_at']) ? format_datetime($row['actual_bom_submitted_at']) : '<span class="text-secondary">Pending</span>' ?>
+                                <div><?= !empty($row['actual_bom_submitted_at']) ? format_datetime($row['actual_bom_submitted_at']) : '<span class="text-secondary">Pending</span>' ?></div>
                             </td>
                             <td class="text-end text-nowrap">
                                 <a href="<?= url('/projects/' . $pId . '#ops-finance-actual-bom-panel') ?>"
                                    class="btn btn-sm <?= ($abNumber === '' || in_array($abStatus, ['Draft', 'Returned for Corrections'], true)) ? 'btn-primary' : 'btn-outline-primary' ?>">
-                                    <?= $abNumber === '' ? 'Review PR & Upload Actual BOM' : (in_array($abStatus, ['Draft', 'Returned for Corrections'], true) ? 'Update / Submit Actual BOM' : 'View PR & Actual BOM') ?>
+                                    <?= $abNumber === '' ? 'Upload BOM' : (in_array($abStatus, ['Draft', 'Returned for Corrections'], true) ? 'Submit BOM' : 'View BOM') ?>
                                 </a>
                             </td>
                         </tr>

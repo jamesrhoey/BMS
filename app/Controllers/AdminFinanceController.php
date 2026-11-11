@@ -14,6 +14,7 @@ use App\Models\Department;
 use App\Models\Project;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseRequest;
+use App\Services\ActivityLogger;
 use App\Services\ActualBomService;
 use App\Services\AuthorizationService;
 use App\Services\ProjectService;
@@ -376,11 +377,11 @@ final class AdminFinanceController extends Controller
             $this->denyAccess($request, 'Unauthorized to configure payment terms.');
         }
 
-        $termName = trim((string) $request->post('payment_term', ''));
-        $amount = (float) $request->post('amount', 0.0);
-        $percent = (float) $request->post('percentage', 0.0);
-        $dueDate = trim((string) $request->post('due_date', ''));
-        $remarks = trim((string) $request->post('remarks', ''));
+        $termName = trim((string) ($request->post('payment_term') ?? $request->post('term_name') ?? ''));
+        $amount = (float) ($request->post('term_amount') ?? $request->post('amount') ?? 0.0);
+        $percent = (float) ($request->post('term_percentage') ?? $request->post('percentage') ?? 0.0);
+        $dueDate = trim((string) ($request->post('term_due_date') ?? $request->post('due_date') ?? ''));
+        $remarks = trim((string) ($request->post('term_remarks') ?? $request->post('remarks') ?? ''));
 
         if ($termName === '' || ($amount <= 0 && $percent <= 0)) {
             Session::flash('error', 'Please provide a valid payment term name and amount or percentage.');

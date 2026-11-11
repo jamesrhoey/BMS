@@ -525,6 +525,52 @@ try {
         'Sidebar collapsed cookie renders icon-only body class immediately on server load'
     );
 
+    // Marketing Department Redesigned Sidebar Navigation Verification
+    assertCheck(
+        str_contains($mktDash['body'], 'data-nav-group="marketing-pm"')
+        && str_contains($mktDash['body'], 'data-nav-group="marketing-docs"')
+        && str_contains($mktDash['body'], 'data-nav-group="marketing-tracking"')
+        && str_contains($mktDash['body'], 'Project Management')
+        && str_contains($mktDash['body'], 'Document Management')
+        && str_contains($mktDash['body'], 'Project Tracking')
+        && str_contains($mktDash['body'], '/marketing/projects/create')
+        && str_contains($mktDash['body'], 'Required Project Documents')
+        && str_contains($mktDash['body'], 'Submitted Documents')
+        && str_contains($mktDash['body'], 'Pending Reviews')
+        && str_contains($mktDash['body'], 'Returned Projects')
+        && str_contains($mktDash['body'], 'Approved Projects')
+        && str_contains($mktDash['body'], 'Forwarded Projects')
+        && !str_contains($mktDash['body'], '>All Projects<'),
+        'Marketing sidebar renders organized dropdown navigation (Project Management, Document Management, Project Tracking)'
+    );
+
+    $mktCreatePage = $mktClient->request('GET', '/marketing/projects/create');
+    assertCheck(
+        $mktCreatePage['status'] === 200
+        && str_contains($mktCreatePage['body'], 'data-nav-group="marketing-pm"')
+        && preg_match('/bms-nav-group\s+open.*data-nav-group="marketing-pm"/s', $mktCreatePage['body']) === 1
+        && preg_match('/bms-subnav-link\s+active.*Project Registration/s', $mktCreatePage['body']) === 1,
+        'Project Registration page (/marketing/projects/create) returns HTTP 200 and auto-expands Project Management dropdown'
+    );
+
+    $mktDocsIncompletePage = $mktClient->request('GET', '/marketing/projects?completeness=incomplete');
+    assertCheck(
+        $mktDocsIncompletePage['status'] === 200
+        && str_contains($mktDocsIncompletePage['body'], 'data-nav-group="marketing-docs"')
+        && preg_match('/bms-nav-group\s+open.*data-nav-group="marketing-docs"/s', $mktDocsIncompletePage['body']) === 1
+        && preg_match('/bms-subnav-link\s+active.*Required Project Documents/s', $mktDocsIncompletePage['body']) === 1,
+        'Required Project Documents filter returns HTTP 200 and auto-expands Document Management dropdown'
+    );
+
+    $mktTrackingPage = $mktClient->request('GET', '/marketing/projects?status=pm_queue');
+    assertCheck(
+        $mktTrackingPage['status'] === 200
+        && str_contains($mktTrackingPage['body'], 'data-nav-group="marketing-tracking"')
+        && preg_match('/bms-nav-group\s+open.*data-nav-group="marketing-tracking"/s', $mktTrackingPage['body']) === 1
+        && preg_match('/bms-subnav-link\s+active.*Pending Reviews/s', $mktTrackingPage['body']) === 1,
+        'Pending Reviews tracking filter returns HTTP 200 and auto-expands Project Tracking dropdown'
+    );
+
     // Sign in Marketing User #2
     $mkt2Client = new HttpTestClient($baseUrl);
     $mkt2LoginForm = $mkt2Client->request('GET', '/login');
@@ -550,6 +596,72 @@ try {
     assertCheck(
         $pmDash['status'] === 200 && str_contains($pmDash['body'], 'Marketing Document Verification Queue'),
         'Project Management user lands on PM Workspace with Marketing Document Verification Queue'
+    );
+
+    // Project Management Department Redesigned Sidebar Navigation Verification
+    assertCheck(
+        str_contains($pmDash['body'], 'data-nav-group="pm-intake"')
+        && str_contains($pmDash['body'], 'data-nav-group="pm-verification"')
+        && str_contains($pmDash['body'], 'data-nav-group="pm-review"')
+        && str_contains($pmDash['body'], 'data-nav-group="pm-approval"')
+        && str_contains($pmDash['body'], 'data-nav-group="pm-forwarding"')
+        && str_contains($pmDash['body'], 'Project Management Dashboard')
+        && str_contains($pmDash['body'], 'Incoming Projects')
+        && str_contains($pmDash['body'], 'All Received Projects')
+        && str_contains($pmDash['body'], 'Document Verification Queue')
+        && str_contains($pmDash['body'], 'Resubmitted Documents')
+        && str_contains($pmDash['body'], 'Projects Under Review')
+        && str_contains($pmDash['body'], 'Returned Projects')
+        && str_contains($pmDash['body'], 'Approved Projects')
+        && str_contains($pmDash['body'], 'Ready for Admin Finance')
+        && str_contains($pmDash['body'], 'Forwarded to Admin Finance'),
+        'Project Management sidebar renders organized dropdown navigation (Intake, Verification, Review, Approval, Forwarding)'
+    );
+
+    // Verify auto-expansion on filter navigation
+    $pmIntakePage = $pmClient->request('GET', '/pm/projects?status=pending');
+    assertCheck(
+        $pmIntakePage['status'] === 200
+        && str_contains($pmIntakePage['body'], 'data-nav-group="pm-intake"')
+        && preg_match('/bms-nav-group\s+open.*data-nav-group="pm-intake"/s', $pmIntakePage['body']) === 1
+        && preg_match('/bms-subnav-link\s+active.*Incoming Projects/s', $pmIntakePage['body']) === 1,
+        'Incoming Projects filter returns HTTP 200 and auto-expands Project Intake dropdown'
+    );
+
+    $pmVerificationPage = $pmClient->request('GET', '/pm/projects?status=verification_queue');
+    assertCheck(
+        $pmVerificationPage['status'] === 200
+        && str_contains($pmVerificationPage['body'], 'data-nav-group="pm-verification"')
+        && preg_match('/bms-nav-group\s+open.*data-nav-group="pm-verification"/s', $pmVerificationPage['body']) === 1
+        && preg_match('/bms-subnav-link\s+active.*Document Verification Queue/s', $pmVerificationPage['body']) === 1,
+        'Document Verification Queue filter returns HTTP 200 and auto-expands Document Verification dropdown'
+    );
+
+    $pmReviewPage = $pmClient->request('GET', '/pm/projects?status=under_review');
+    assertCheck(
+        $pmReviewPage['status'] === 200
+        && str_contains($pmReviewPage['body'], 'data-nav-group="pm-review"')
+        && preg_match('/bms-nav-group\s+open.*data-nav-group="pm-review"/s', $pmReviewPage['body']) === 1
+        && preg_match('/bms-subnav-link\s+active.*Projects Under Review/s', $pmReviewPage['body']) === 1,
+        'Projects Under Review filter returns HTTP 200 and auto-expands Project Review dropdown'
+    );
+
+    $pmApprovalPage = $pmClient->request('GET', '/pm/projects?status=approved');
+    assertCheck(
+        $pmApprovalPage['status'] === 200
+        && str_contains($pmApprovalPage['body'], 'data-nav-group="pm-approval"')
+        && preg_match('/bms-nav-group\s+open.*data-nav-group="pm-approval"/s', $pmApprovalPage['body']) === 1
+        && preg_match('/bms-subnav-link\s+active.*Approved Projects/s', $pmApprovalPage['body']) === 1,
+        'Approved Projects filter returns HTTP 200 and auto-expands Project Approval dropdown'
+    );
+
+    $pmForwardingPage = $pmClient->request('GET', '/pm/projects?status=ready_for_admin_finance');
+    assertCheck(
+        $pmForwardingPage['status'] === 200
+        && str_contains($pmForwardingPage['body'], 'data-nav-group="pm-forwarding"')
+        && preg_match('/bms-nav-group\s+open.*data-nav-group="pm-forwarding"/s', $pmForwardingPage['body']) === 1
+        && preg_match('/bms-subnav-link\s+active.*Ready for Admin Finance/s', $pmForwardingPage['body']) === 1,
+        'Ready for Admin Finance filter returns HTTP 200 and auto-expands Project Forwarding dropdown'
     );
 
     // Sign in Operations User
@@ -1357,6 +1469,76 @@ try {
         'Admin Finance Dashboard (/dashboard & /admin-finance/projects) displays all 4 summary cards, approved incoming project, and JOM issuance panel'
     );
 
+    // Admin Finance Department Redesigned Sidebar Navigation Verification
+    assertCheck(
+        str_contains($afinDash['body'], 'data-nav-group="afin-inbox"')
+        && str_contains($afinDash['body'], 'data-nav-group="afin-jom"')
+        && str_contains($afinDash['body'], 'data-nav-group="afin-handover"')
+        && str_contains($afinDash['body'], 'data-nav-group="afin-actual-bom"')
+        && str_contains($afinDash['body'], 'data-nav-group="afin-purchasing"')
+        && str_contains($afinDash['body'], 'Admin Finance Dashboard')
+        && str_contains($afinDash['body'], 'Incoming Approved Projects')
+        && str_contains($afinDash['body'], 'All Received Projects')
+        && str_contains($afinDash['body'], 'JOM Issuance Queue')
+        && str_contains($afinDash['body'], 'Projects Under JOM Review')
+        && str_contains($afinDash['body'], 'Issued JOM Records')
+        && str_contains($afinDash['body'], 'Projects Ready for Operations')
+        && str_contains($afinDash['body'], 'Forwarded Projects')
+        && str_contains($afinDash['body'], 'Incoming Actual BOM')
+        && str_contains($afinDash['body'], 'Actual BOM Under Review')
+        && str_contains($afinDash['body'], 'Returned Actual BOM')
+        && str_contains($afinDash['body'], 'Accepted Actual BOM')
+        && str_contains($afinDash['body'], 'Purchase Order Records')
+        && str_contains($afinDash['body'], 'Purchase Order Tracking'),
+        'Admin Finance sidebar renders organized dropdown navigation (Inbox, JOM, Handover, Actual BOM, Purchasing)'
+    );
+
+    // Verify auto-expansion on filter navigation
+    $afinInboxPage = $afinClient->request('GET', '/admin-finance/projects?status=incoming_approved');
+    assertCheck(
+        $afinInboxPage['status'] === 200
+        && str_contains($afinInboxPage['body'], 'data-nav-group="afin-inbox"')
+        && preg_match('/bms-nav-group\s+open.*data-nav-group="afin-inbox"/s', $afinInboxPage['body']) === 1
+        && preg_match('/bms-subnav-link\s+active.*Incoming Approved Projects/s', $afinInboxPage['body']) === 1,
+        'Incoming Approved Projects filter returns HTTP 200 and auto-expands Project Inbox dropdown'
+    );
+
+    $afinJomPage = $afinClient->request('GET', '/admin-finance/projects?status=awaiting_jom');
+    assertCheck(
+        $afinJomPage['status'] === 200
+        && str_contains($afinJomPage['body'], 'data-nav-group="afin-jom"')
+        && preg_match('/bms-nav-group\s+open.*data-nav-group="afin-jom"/s', $afinJomPage['body']) === 1
+        && preg_match('/bms-subnav-link\s+active.*JOM Issuance Queue/s', $afinJomPage['body']) === 1,
+        'JOM Issuance Queue filter returns HTTP 200 and auto-expands Job Order Management dropdown'
+    );
+
+    $afinHandoverPage = $afinClient->request('GET', '/admin-finance/projects?status=ready_for_operations');
+    assertCheck(
+        $afinHandoverPage['status'] === 200
+        && str_contains($afinHandoverPage['body'], 'data-nav-group="afin-handover"')
+        && preg_match('/bms-nav-group\s+open.*data-nav-group="afin-handover"/s', $afinHandoverPage['body']) === 1
+        && preg_match('/bms-subnav-link\s+active.*Projects Ready for Operations/s', $afinHandoverPage['body']) === 1,
+        'Projects Ready for Operations filter returns HTTP 200 and auto-expands Operations Handover dropdown'
+    );
+
+    $afinActualBomPage = $afinClient->request('GET', '/admin-finance/projects?status=actual_bom_submitted');
+    assertCheck(
+        $afinActualBomPage['status'] === 200
+        && str_contains($afinActualBomPage['body'], 'data-nav-group="afin-actual-bom"')
+        && preg_match('/bms-nav-group\s+open.*data-nav-group="afin-actual-bom"/s', $afinActualBomPage['body']) === 1
+        && preg_match('/bms-subnav-link\s+active.*Incoming Actual BOM/s', $afinActualBomPage['body']) === 1,
+        'Incoming Actual BOM filter returns HTTP 200 and auto-expands Actual BOM Management dropdown'
+    );
+
+    $afinPurchasingPage = $afinClient->request('GET', '/admin-finance/projects?status=po_records');
+    assertCheck(
+        $afinPurchasingPage['status'] === 200
+        && str_contains($afinPurchasingPage['body'], 'data-nav-group="afin-purchasing"')
+        && preg_match('/bms-nav-group\s+open.*data-nav-group="afin-purchasing"/s', $afinPurchasingPage['body']) === 1
+        && preg_match('/bms-subnav-link\s+active.*Purchase Order Records/s', $afinPurchasingPage['body']) === 1,
+        'Purchase Order Records filter returns HTTP 200 and auto-expands Purchasing Management dropdown'
+    );
+
     // 12.8 Verify Admin Finance receives ONLY approved & forwarded projects (unapproved project $project2Record is hidden & blocked)
     $afinUnapprovedView = $afinClient->request('GET', "/projects/{$project2Record['id']}");
     $afinUnapprovedJom = $afinClient->request('POST', "/projects/{$project2Record['id']}/issue-jom", ['_csrf_token' => $afinCsrf]);
@@ -1564,6 +1746,64 @@ try {
         'Operations Dashboard and Projects list load with HTTP 200, display all 4 metrics, and show the forwarded project with JOM, SLD, and Marketing BOM'
     );
 
+    // Operations Department Redesigned Sidebar Navigation Verification
+    assertCheck(
+        str_contains($opsDash['body'], 'data-nav-group="ops-pm"')
+        && str_contains($opsDash['body'], 'data-nav-group="ops-pr"')
+        && str_contains($opsDash['body'], 'data-nav-group="ops-purchasing"')
+        && str_contains($opsDash['body'], 'Operations Dashboard')
+        && str_contains($opsDash['body'], 'Project Management')
+        && str_contains($opsDash['body'], 'Received Projects')
+        && str_contains($opsDash['body'], 'All Operations Projects')
+        && str_contains($opsDash['body'], 'Purchase Request Management')
+        && str_contains($opsDash['body'], 'Draft Purchase Requests')
+        && str_contains($opsDash['body'], 'Submitted / Pending PRs')
+        && str_contains($opsDash['body'], 'Approved PRs')
+        && str_contains($opsDash['body'], 'Returned PRs')
+        && str_contains($opsDash['body'], 'Rejected PRs')
+        && str_contains($opsDash['body'], 'Purchasing Tracking')
+        && str_contains($opsDash['body'], 'Purchase Order Tracking')
+        && str_contains($opsDash['body'], 'Awaiting Purchasing'),
+        'Operations Department sidebar renders organized dropdown navigation (Project Management, PR Management, Purchasing Tracking)'
+    );
+
+    // Verify auto-expansion on filter navigation
+    $opsReceivedPage = $opsClient->request('GET', '/operations/projects?status=awaiting_pr');
+    assertCheck(
+        $opsReceivedPage['status'] === 200
+        && str_contains($opsReceivedPage['body'], 'data-nav-group="ops-pm"')
+        && preg_match('/bms-nav-group\s+open.*data-nav-group="ops-pm"/s', $opsReceivedPage['body']) === 1
+        && preg_match('/bms-subnav-link\s+active.*Received Projects/s', $opsReceivedPage['body']) === 1,
+        'Received Projects filter returns HTTP 200 and auto-expands Project Management dropdown'
+    );
+
+    $opsPrDraftPage = $opsClient->request('GET', '/operations/projects?status=draft');
+    assertCheck(
+        $opsPrDraftPage['status'] === 200
+        && str_contains($opsPrDraftPage['body'], 'data-nav-group="ops-pr"')
+        && preg_match('/bms-nav-group\s+open.*data-nav-group="ops-pr"/s', $opsPrDraftPage['body']) === 1
+        && preg_match('/bms-subnav-link\s+active.*Draft Purchase Requests/s', $opsPrDraftPage['body']) === 1,
+        'Draft Purchase Requests filter returns HTTP 200 and auto-expands Purchase Request Management dropdown'
+    );
+
+    $opsPrApprovedPage = $opsClient->request('GET', '/operations/projects?status=approved');
+    assertCheck(
+        $opsPrApprovedPage['status'] === 200
+        && str_contains($opsPrApprovedPage['body'], 'data-nav-group="ops-pr"')
+        && preg_match('/bms-nav-group\s+open.*data-nav-group="ops-pr"/s', $opsPrApprovedPage['body']) === 1
+        && preg_match('/bms-subnav-link\s+active.*Approved PRs/s', $opsPrApprovedPage['body']) === 1,
+        'Approved PRs filter returns HTTP 200 and auto-expands Purchase Request Management dropdown'
+    );
+
+    $opsPoTrackingPage = $opsClient->request('GET', '/operations/projects?status=converted_po');
+    assertCheck(
+        $opsPoTrackingPage['status'] === 200
+        && str_contains($opsPoTrackingPage['body'], 'data-nav-group="ops-purchasing"')
+        && preg_match('/bms-nav-group\s+open.*data-nav-group="ops-purchasing"/s', $opsPoTrackingPage['body']) === 1
+        && preg_match('/bms-subnav-link\s+active.*Purchase Order Tracking/s', $opsPoTrackingPage['body']) === 1,
+        'Purchase Order Tracking filter returns HTTP 200 and auto-expands Purchasing Tracking dropdown'
+    );
+
     // 13.3 Prepare Purchase Request (PR) with multiple line items & validation
     $opsDetailBeforePr = $opsClient->request('GET', "/projects/{$projectId}");
     assertCheck(
@@ -1699,6 +1939,66 @@ try {
         && str_contains($opfinDetailView['body'], 'Mounting Structure Aluminum Rails')
         && $opfinDownloadPrAtt['status'] === 200,
         'OPS Finance receives PR in Incoming Queue, views all requested line items & specifications, and downloads PR attachment (HTTP 200)'
+    );
+
+    // OPS Finance Department Redesigned Sidebar Navigation Verification
+    assertCheck(
+        str_contains($opfinDashAfterSubmit['body'], 'data-nav-group="opfin-pr-inbox"')
+        && str_contains($opfinDashAfterSubmit['body'], 'data-nav-group="opfin-actual-bom"')
+        && str_contains($opfinDashAfterSubmit['body'], 'data-nav-group="opfin-bom-submission"')
+        && str_contains($opfinDashAfterSubmit['body'], 'OPS Finance Dashboard')
+        && str_contains($opfinDashAfterSubmit['body'], 'Purchase Request Inbox')
+        && str_contains($opfinDashAfterSubmit['body'], 'Incoming Purchase Requests')
+        && str_contains($opfinDashAfterSubmit['body'], 'All Received PRs')
+        && str_contains($opfinDashAfterSubmit['body'], 'Pending PR Review')
+        && str_contains($opfinDashAfterSubmit['body'], 'Returned PRs')
+        && str_contains($opfinDashAfterSubmit['body'], 'Processed PRs')
+        && str_contains($opfinDashAfterSubmit['body'], 'Actual BOM Management')
+        && str_contains($opfinDashAfterSubmit['body'], 'Actual BOM Preparation')
+        && str_contains($opfinDashAfterSubmit['body'], 'Draft Actual BOMs')
+        && str_contains($opfinDashAfterSubmit['body'], 'Actual BOM Records')
+        && str_contains($opfinDashAfterSubmit['body'], 'Actual BOM Submission')
+        && str_contains($opfinDashAfterSubmit['body'], 'Pending Submission')
+        && str_contains($opfinDashAfterSubmit['body'], 'Submitted Actual BOMs')
+        && str_contains($opfinDashAfterSubmit['body'], 'Returned Actual BOMs'),
+        'OPS Finance Department sidebar renders organized dropdown navigation (PR Inbox, Actual BOM Management, Actual BOM Submission)'
+    );
+
+    // Verify auto-expansion on filter navigation
+    $opfinIncomingPrPage = $opfinClient->request('GET', '/ops-finance/projects?status=awaiting_review');
+    assertCheck(
+        $opfinIncomingPrPage['status'] === 200
+        && str_contains($opfinIncomingPrPage['body'], 'data-nav-group="opfin-pr-inbox"')
+        && preg_match('/bms-nav-group\s+open.*data-nav-group="opfin-pr-inbox"/s', $opfinIncomingPrPage['body']) === 1
+        && preg_match('/bms-subnav-link\s+active.*Incoming Purchase Requests/s', $opfinIncomingPrPage['body']) === 1,
+        'Incoming Purchase Requests filter returns HTTP 200 and auto-expands Purchase Request Inbox dropdown'
+    );
+
+    $opfinUnderReviewPage = $opfinClient->request('GET', '/ops-finance/projects?status=under_review');
+    assertCheck(
+        $opfinUnderReviewPage['status'] === 200
+        && str_contains($opfinUnderReviewPage['body'], 'data-nav-group="opfin-pr-inbox"')
+        && preg_match('/bms-nav-group\s+open.*data-nav-group="opfin-pr-inbox"/s', $opfinUnderReviewPage['body']) === 1
+        && preg_match('/bms-subnav-link\s+active.*Pending PR Review/s', $opfinUnderReviewPage['body']) === 1,
+        'Pending PR Review filter returns HTTP 200 and auto-expands Purchase Request Inbox dropdown'
+    );
+
+    $opfinBomPrepPage = $opfinClient->request('GET', '/ops-finance/projects?status=pending_actual_bom');
+    assertCheck(
+        $opfinBomPrepPage['status'] === 200
+        && str_contains($opfinBomPrepPage['body'], 'data-nav-group="opfin-actual-bom"')
+        && preg_match('/bms-nav-group\s+open.*data-nav-group="opfin-actual-bom"/s', $opfinBomPrepPage['body']) === 1
+        && preg_match('/bms-subnav-link\s+active.*Actual BOM Preparation/s', $opfinBomPrepPage['body']) === 1,
+        'Actual BOM Preparation filter returns HTTP 200 and auto-expands Actual BOM Management dropdown'
+    );
+
+    $opfinSubmittedAfinPage = $opfinClient->request('GET', '/ops-finance/projects?status=submitted_to_afin');
+    assertCheck(
+        $opfinSubmittedAfinPage['status'] === 200
+        && str_contains($opfinSubmittedAfinPage['body'], 'data-nav-group="opfin-bom-submission"')
+        && preg_match('/bms-nav-group\s+open.*data-nav-group="opfin-bom-submission"/s', $opfinSubmittedAfinPage['body']) === 1
+        && preg_match('/bms-subnav-link\s+active.*Submitted Actual BOMs/s', $opfinSubmittedAfinPage['body']) === 1,
+        'Submitted Actual BOMs filter returns HTTP 200 and auto-expands Actual BOM Submission dropdown'
     );
 
     // Controlled Return for Corrections test: OPS Finance returns PR to Operations
@@ -2424,15 +2724,17 @@ try {
         'Authorized approver approves PR #4: status is Approved and approved quantities are locked'
     );
 
-    // 16.2 PO Authorization Hierarchy: Operations, Marketing, and PM are strictly blocked from creating POs
+    // 16.2 PO Authorization Hierarchy: Operations, Marketing, PM, and OPS Finance are strictly blocked from creating POs
     $opsPoCreateRes = $opsClient->request('POST', "/projects/{$project4Id}/purchase-orders", ['_csrf_token' => $opsCsrf]);
     $mktPoCreateRes = $mktClient->request('POST', "/projects/{$project4Id}/purchase-orders", ['_csrf_token' => $mktCsrf]);
     $pmPoCreateRes = $pmClient->request('POST', "/projects/{$project4Id}/purchase-orders", ['_csrf_token' => $pmCsrf]);
+    $opfinPoCreateRes = $opfinClient->request('POST', "/projects/{$project4Id}/purchase-orders", ['_csrf_token' => $opfinCsrf]);
     assertCheck(
         $opsPoCreateRes['status'] === 403
         && $mktPoCreateRes['status'] === 403
-        && $pmPoCreateRes['status'] === 403,
-        'Operations, Marketing, and PM users are strictly blocked from creating Purchase Orders (HTTP 403)'
+        && $pmPoCreateRes['status'] === 403
+        && $opfinPoCreateRes['status'] === 403,
+        'Operations, Marketing, PM, and OPS Finance users are strictly blocked from creating Purchase Orders (HTTP 403)'
     );
 
     // 16.3 PR to PO Connection: Admin Finance creates PO #1 with auto-retrieved PR items & Milestone Terms of Payment
@@ -2487,7 +2789,7 @@ try {
         && $po1['status'] === PurchaseOrder::STATUS_DRAFT
         && $pr4Item1After !== null
         && (float) $pr4Item1After['ordered_quantity'] === 6.00
-        && (float) $pr4Item1After['remaining_quantity'] === 4.00
+        && ((float) $pr4Item1After['approved_quantity'] - (float) $pr4Item1After['ordered_quantity']) === 4.00
         && $pr4AfterPo1['status'] === PurchaseRequest::STATUS_PARTIALLY_ORDERED,
         'Admin Finance creates PO #1 (PO-YYYYMM-XXXX preserving leading zeros), tracks partial ordered quantity (6/10), and PR status transitions to Partially Ordered'
     );
@@ -2548,13 +2850,20 @@ try {
         'Multiple POs linked to one PR: PO #2 created for remaining items, and PR transitions to Converted to PO / Fully Ordered'
     );
 
-    // 16.6 PO Approval and Authorization Workflow: Operations blocked from authorizing PO
+    // 16.6 PO Approval and Authorization Workflow: Operations & OPS Finance blocked from authorizing PO
     $po1Id = (int) $po1['id'];
     $opsPoAuthAttempt = $opsClient->request('POST', "/projects/{$project4Id}/purchase-orders/{$po1Id}/authorize", [
         '_csrf_token' => $opsCsrf,
         'authorization_notes' => 'Operations unauthorized authorization attempt.',
     ]);
-    assertCheck($opsPoAuthAttempt['status'] === 403, 'Operations user is strictly blocked from authorizing Purchase Orders (HTTP 403)');
+    $opfinPoAuthAttempt = $opfinClient->request('POST', "/projects/{$project4Id}/purchase-orders/{$po1Id}/authorize", [
+        '_csrf_token' => $opfinCsrf,
+        'authorization_notes' => 'OPS Finance unauthorized authorization attempt.',
+    ]);
+    assertCheck(
+        $opsPoAuthAttempt['status'] === 403 && $opfinPoAuthAttempt['status'] === 403,
+        'Operations and OPS Finance users are strictly blocked from authorizing Purchase Orders (HTTP 403)'
+    );
 
     // Admin Finance authorizes PO #1
     $afinPoAuthRes = $afinClient->request('POST', "/projects/{$project4Id}/purchase-orders/{$po1Id}/authorize", [
@@ -2570,11 +2879,17 @@ try {
         'Admin Finance financially authorizes PO #1: status is Approved, authorizer and timestamp saved'
     );
 
-    // Operations blocked from issuing PO to supplier
+    // Operations and OPS Finance blocked from issuing PO to supplier
     $opsPoIssueAttempt = $opsClient->request('POST', "/projects/{$project4Id}/purchase-orders/{$po1Id}/issue", [
         '_csrf_token' => $opsCsrf,
     ]);
-    assertCheck($opsPoIssueAttempt['status'] === 403, 'Operations user is strictly blocked from issuing PO to supplier (HTTP 403)');
+    $opfinPoIssueAttempt = $opfinClient->request('POST', "/projects/{$project4Id}/purchase-orders/{$po1Id}/issue", [
+        '_csrf_token' => $opfinCsrf,
+    ]);
+    assertCheck(
+        $opsPoIssueAttempt['status'] === 403 && $opfinPoIssueAttempt['status'] === 403,
+        'Operations and OPS Finance users are strictly blocked from issuing PO to supplier (HTTP 403)'
+    );
 
     // Admin Finance issues PO #1 to supplier
     $afinPoIssueRes = $afinClient->request('POST', "/projects/{$project4Id}/purchase-orders/{$po1Id}/issue", [

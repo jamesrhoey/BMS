@@ -546,10 +546,24 @@ final class ActualBom
         $statusFilter = trim((string) ($filters['status'] ?? ''));
         if ($statusFilter === 'awaiting_review') {
             $where[] = 'pr.status = \'Submitted to OPS Finance\'';
+        } elseif ($statusFilter === 'under_review') {
+            $where[] = 'pr.status = \'Under OPS Finance Review\'';
+        } elseif ($statusFilter === 'returned_prs' || $statusFilter === 'returned') {
+            $where[] = 'pr.status IN (\'Returned for Corrections\', \'Returned for Revision\')';
+        } elseif ($statusFilter === 'processed_prs' || $statusFilter === 'processed') {
+            $where[] = 'pr.status IN (\'Actual BOM Submitted\', \'Approved\', \'Converted to PO\', \'Partially Ordered\', \'Fully Ordered\')';
         } elseif ($statusFilter === 'pending_actual_bom') {
             $where[] = '(ab.id IS NULL OR ab.status IN (\'Draft\', \'Returned for Corrections\'))';
+        } elseif ($statusFilter === 'draft_bom' || $statusFilter === 'draft') {
+            $where[] = 'ab.status = \'Draft\'';
+        } elseif ($statusFilter === 'all_boms') {
+            $where[] = 'ab.id IS NOT NULL';
+        } elseif ($statusFilter === 'pending_submission') {
+            $where[] = 'ab.status IN (\'Draft\', \'Returned for Corrections\')';
         } elseif ($statusFilter === 'submitted_to_afin') {
             $where[] = 'ab.status IN (\'Submitted to Admin Finance\', \'Received\', \'Under Review\', \'Accepted\')';
+        } elseif ($statusFilter === 'returned_bom') {
+            $where[] = 'ab.status = \'Returned for Corrections\'';
         }
 
         $whereClause = ' WHERE ' . implode(' AND ', $where);

@@ -48,19 +48,19 @@ $buildLogPageUrl = static function (int $targetPage) use ($filters): string {
         <table class="table mb-0">
             <thead>
                 <tr>
-                    <th>ID</th>
-                    <th>Timestamp &darr;</th>
-                    <th>Actor</th>
-                    <th>Action</th>
-                    <th>Entity</th>
-                    <th>Description</th>
-                    <th>IP Address</th>
+                    <th style="width: 6%; min-width: 50px;">ID</th>
+                    <th style="width: 14%; min-width: 120px;">Timestamp &darr;</th>
+                    <th style="width: 15%; min-width: 130px;">Actor</th>
+                    <th style="width: 16%; min-width: 130px;">Action</th>
+                    <th style="width: 12%; min-width: 100px;">Entity</th>
+                    <th style="width: 27%; min-width: 200px;">Description</th>
+                    <th style="width: 10%; min-width: 90px;">IP Address</th>
                 </tr>
             </thead>
             <tbody>
                 <?php if ($logs === []): ?>
                     <tr>
-                        <td colspan="7" class="text-center text-secondary py-4">No audit log entries match the selected criteria.</td>
+                        <td colspan="7" class="text-center text-secondary py-4 small">No audit log entries match the selected criteria.</td>
                     </tr>
                 <?php else: ?>
                     <?php foreach ($logs as $log): ?>
@@ -69,21 +69,22 @@ $buildLogPageUrl = static function (int $targetPage) use ($filters): string {
                             <td class="small text-nowrap"><?= format_datetime($log['created_at']) ?></td>
                             <td class="small">
                                 <?php if (!empty($log['username'])): ?>
-                                    <div class="fw-semibold"><?= e($log['full_name']) ?></div>
-                                    <div class="text-secondary font-monospace">@<?= e($log['username']) ?></div>
+                                    <div class="fw-semibold text-truncate"><?= e($log['full_name']) ?></div>
+                                    <div class="text-secondary font-monospace text-truncate">@<?= e($log['username']) ?></div>
                                 <?php else: ?>
                                     <span class="text-secondary">System / Guest</span>
                                 <?php endif; ?>
                             </td>
                             <td><span class="badge badge-soft-secondary font-monospace"><?= e($log['action']) ?></span></td>
                             <td class="small text-secondary">
-                                <?= e($log['entity_type']) ?>
-                                <?php if ($log['entity_id'] !== null): ?>
-                                    #<?= (int) $log['entity_id'] ?>
-                                <?php endif; ?>
+                                <div class="text-truncate"><?= e($log['entity_type']) ?><?= $log['entity_id'] !== null ? ' #' . (int) $log['entity_id'] : '' ?></div>
                             </td>
-                            <td class="small"><?= e($log['description']) ?></td>
-                            <td class="small font-monospace text-secondary"><?= e(format_ip($log['ip_address'] ?? null)) ?></td>
+                            <td class="small" title="<?= e($log['description']) ?>">
+                                <div class="text-truncate" style="max-width: 320px;"><?= e($log['description']) ?></div>
+                            </td>
+                            <td class="small font-monospace text-secondary">
+                                <div class="text-nowrap"><?= e(format_ip($log['ip_address'] ?? null)) ?></div>
+                            </td>
                         </tr>
                     <?php endforeach; ?>
                 <?php endif; ?>

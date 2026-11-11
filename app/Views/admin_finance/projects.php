@@ -24,10 +24,18 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
 
         <select id="status" name="status" class="form-select form-select-sm bms-toolbar-select" aria-label="Filter by Admin Finance status">
             <option value="">All Incoming Projects</option>
-            <option value="awaiting_jom" <?= ($filters['status'] ?? '') === 'awaiting_jom' ? 'selected' : '' ?>>Awaiting JOM Issuance</option>
-            <option value="under_review" <?= ($filters['status'] ?? '') === 'under_review' ? 'selected' : '' ?>>Under Admin Finance Review</option>
+            <option value="incoming_approved" <?= ($filters['status'] ?? '') === 'incoming_approved' ? 'selected' : '' ?>>Incoming Approved Projects</option>
+            <option value="awaiting_jom" <?= in_array($filters['status'] ?? '', ['awaiting_jom', 'awaiting'], true) ? 'selected' : '' ?>>Awaiting JOM Issuance</option>
+            <option value="under_review" <?= in_array($filters['status'] ?? '', ['under_review', 'under_afin_review'], true) ? 'selected' : '' ?>>Under Admin Finance Review</option>
             <option value="jom_issued" <?= ($filters['status'] ?? '') === 'jom_issued' ? 'selected' : '' ?>>JOM Issued</option>
-            <option value="forwarded_to_operations" <?= ($filters['status'] ?? '') === 'forwarded_to_operations' ? 'selected' : '' ?>>Forwarded to Operations</option>
+            <option value="ready_for_operations" <?= in_array($filters['status'] ?? '', ['ready_for_operations', 'ready_ops'], true) ? 'selected' : '' ?>>Ready for Operations</option>
+            <option value="forwarded_to_operations" <?= in_array($filters['status'] ?? '', ['forwarded_to_operations', 'forwarded_ops'], true) ? 'selected' : '' ?>>Forwarded to Operations</option>
+            <option value="actual_bom_submitted" <?= in_array($filters['status'] ?? '', ['actual_bom_submitted', 'actual_bom_incoming'], true) ? 'selected' : '' ?>>Actual BOM Submitted</option>
+            <option value="actual_bom_under_review" <?= ($filters['status'] ?? '') === 'actual_bom_under_review' ? 'selected' : '' ?>>Actual BOM Under Review</option>
+            <option value="actual_bom_returned" <?= ($filters['status'] ?? '') === 'actual_bom_returned' ? 'selected' : '' ?>>Actual BOM Returned</option>
+            <option value="actual_bom_accepted" <?= ($filters['status'] ?? '') === 'actual_bom_accepted' ? 'selected' : '' ?>>Actual BOM Accepted</option>
+            <option value="po_records" <?= in_array($filters['status'] ?? '', ['po_records', 'has_po'], true) ? 'selected' : '' ?>>Purchase Order Records</option>
+            <option value="po_issued" <?= ($filters['status'] ?? '') === 'po_issued' ? 'selected' : '' ?>>POs Issued to Supplier</option>
         </select>
 
         <select id="sort" name="sort" class="form-select form-select-sm bms-toolbar-select" aria-label="Sort by date">
@@ -60,14 +68,14 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
         <table class="table mb-0">
             <thead>
                 <tr>
-                    <th>Project Name</th>
-                    <th>Client / End User</th>
-                    <th>Project Identifier</th>
-                    <th>PM Approval Date</th>
-                    <th>JOM Status</th>
-                    <th>Assigned JOM Number</th>
-                    <th>Submitted By</th>
-                    <th class="text-end">Available Actions</th>
+                    <th style="width: 20%; min-width: 180px;">Project Name</th>
+                    <th style="width: 13%; min-width: 120px;">Client / End User</th>
+                    <th style="width: 11%; min-width: 105px;">Project Identifier</th>
+                    <th style="width: 12%; min-width: 115px;">PM Approval Date</th>
+                    <th style="width: 16%; min-width: 140px;">JOM Status</th>
+                    <th style="width: 10%; min-width: 95px;">Assigned JOM</th>
+                    <th style="width: 10%; min-width: 95px;">Submitted By</th>
+                    <th class="text-end" style="width: 8%; min-width: 80px;">Available Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -104,21 +112,23 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
                         ?>
                         <tr>
                             <td>
-                                <a href="<?= url('/projects/' . $pId) ?>" class="fw-semibold text-dark text-decoration-none">
+                                <a href="<?= url('/projects/' . $pId) ?>" class="fw-semibold text-dark text-decoration-none text-truncate d-block" title="<?= e($proj['project_name']) ?>">
                                     <?= e($proj['project_name']) ?>
                                 </a>
-                                <div class="mt-1">
+                                <div class="text-truncate">
                                     <span class="badge <?= project_status_badge_class($pStatus) ?>"><?= e($pStatus) ?></span>
                                 </div>
                             </td>
-                            <td><?= e($proj['client_name']) ?></td>
+                            <td>
+                                <div class="text-truncate" title="<?= e($proj['client_name']) ?>"><?= e($proj['client_name']) ?></div>
+                            </td>
                             <td>
                                 <span class="font-monospace small fw-semibold"><?= e($proj['project_code']) ?></span>
                             </td>
-                            <td class="small text-nowrap">
-                                <?= format_datetime($proj['verified_at'] ?? $proj['forwarded_to_afin_at'] ?? null) ?>
+                            <td class="small">
+                                <div class="text-nowrap"><?= format_datetime($proj['verified_at'] ?? $proj['forwarded_to_afin_at'] ?? null) ?></div>
                                 <?php if (!empty($proj['verifier_name'])): ?>
-                                    <div class="text-secondary" style="font-size: 0.75rem;">by <?= e($proj['verifier_name']) ?></div>
+                                    <div class="text-secondary small text-truncate">by <?= e($proj['verifier_name']) ?></div>
                                 <?php endif; ?>
                             </td>
                             <td>
@@ -128,18 +138,14 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
                                 <?php if ($hasJom): ?>
                                     <span class="badge bg-primary font-monospace"><?= e($proj['jom_number']) ?></span>
                                     <?php if (!empty($proj['jom_issued_at'])): ?>
-                                        <div class="text-secondary" style="font-size: 0.72rem;"><?= format_datetime($proj['jom_issued_at']) ?></div>
+                                        <div class="text-secondary small text-truncate"><?= format_datetime($proj['jom_issued_at']) ?></div>
                                     <?php endif; ?>
                                 <?php else: ?>
                                     <span class="text-secondary small">Pending Issuance</span>
                                 <?php endif; ?>
                             </td>
                             <td class="small">
-                                <?php if (!empty($proj['submitter_name'])): ?>
-                                    <?= e($proj['submitter_name']) ?>
-                                <?php else: ?>
-                                    <span class="text-secondary"><?= e($proj['creator_name'] ?? '—') ?></span>
-                                <?php endif; ?>
+                                <div class="text-truncate"><?= e(!empty($proj['submitter_name']) ? $proj['submitter_name'] : ($proj['creator_name'] ?? '—')) ?></div>
                             </td>
                             <td class="text-end text-nowrap">
                                 <div class="bms-action-group">

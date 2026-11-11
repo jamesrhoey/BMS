@@ -78,10 +78,18 @@ $jomRequiresConfirmation = (bool) ($jomConfig['requires_business_confirmation'] 
 
         <select id="status" name="status" class="form-select form-select-sm bms-toolbar-select" aria-label="Filter by Admin Finance status">
             <option value="">All Incoming Projects</option>
-            <option value="awaiting_jom" <?= ($filters['status'] ?? '') === 'awaiting_jom' ? 'selected' : '' ?>>Awaiting JOM Issuance</option>
-            <option value="under_review" <?= ($filters['status'] ?? '') === 'under_review' ? 'selected' : '' ?>>Under Admin Finance Review</option>
+            <option value="incoming_approved" <?= ($filters['status'] ?? '') === 'incoming_approved' ? 'selected' : '' ?>>Incoming Approved Projects</option>
+            <option value="awaiting_jom" <?= in_array($filters['status'] ?? '', ['awaiting_jom', 'awaiting'], true) ? 'selected' : '' ?>>Awaiting JOM Issuance</option>
+            <option value="under_review" <?= in_array($filters['status'] ?? '', ['under_review', 'under_afin_review'], true) ? 'selected' : '' ?>>Under Admin Finance Review</option>
             <option value="jom_issued" <?= ($filters['status'] ?? '') === 'jom_issued' ? 'selected' : '' ?>>JOM Issued</option>
-            <option value="forwarded_to_operations" <?= ($filters['status'] ?? '') === 'forwarded_to_operations' ? 'selected' : '' ?>>Forwarded to Operations</option>
+            <option value="ready_for_operations" <?= in_array($filters['status'] ?? '', ['ready_for_operations', 'ready_ops'], true) ? 'selected' : '' ?>>Ready for Operations</option>
+            <option value="forwarded_to_operations" <?= in_array($filters['status'] ?? '', ['forwarded_to_operations', 'forwarded_ops'], true) ? 'selected' : '' ?>>Forwarded to Operations</option>
+            <option value="actual_bom_submitted" <?= in_array($filters['status'] ?? '', ['actual_bom_submitted', 'actual_bom_incoming'], true) ? 'selected' : '' ?>>Actual BOM Submitted</option>
+            <option value="actual_bom_under_review" <?= ($filters['status'] ?? '') === 'actual_bom_under_review' ? 'selected' : '' ?>>Actual BOM Under Review</option>
+            <option value="actual_bom_returned" <?= ($filters['status'] ?? '') === 'actual_bom_returned' ? 'selected' : '' ?>>Actual BOM Returned</option>
+            <option value="actual_bom_accepted" <?= ($filters['status'] ?? '') === 'actual_bom_accepted' ? 'selected' : '' ?>>Actual BOM Accepted</option>
+            <option value="po_records" <?= in_array($filters['status'] ?? '', ['po_records', 'has_po'], true) ? 'selected' : '' ?>>Purchase Order Records</option>
+            <option value="po_issued" <?= ($filters['status'] ?? '') === 'po_issued' ? 'selected' : '' ?>>POs Issued to Supplier</option>
         </select>
 
         <select id="sort" name="sort" class="form-select form-select-sm bms-toolbar-select" aria-label="Sort by date">

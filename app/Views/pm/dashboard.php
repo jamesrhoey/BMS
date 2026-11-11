@@ -70,11 +70,13 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
 
         <select id="status" name="status" class="form-select form-select-sm bms-toolbar-select" aria-label="Filter by verification status">
             <option value="">All Verification Statuses</option>
-            <option value="pending" <?= in_array($filters['status'] ?? '', ['pending', 'awaiting'], true) ? 'selected' : '' ?>>Pending Verification</option>
+            <option value="pending" <?= in_array($filters['status'] ?? '', ['pending', 'awaiting'], true) ? 'selected' : '' ?>>Incoming / Pending Verification</option>
+            <option value="verification_queue" <?= in_array($filters['status'] ?? '', ['verification_queue', 'pm_queue'], true) ? 'selected' : '' ?>>Document Verification Queue</option>
             <option value="under_review" <?= ($filters['status'] ?? '') === 'under_review' ? 'selected' : '' ?>>Under Review</option>
             <option value="returned" <?= ($filters['status'] ?? '') === 'returned' ? 'selected' : '' ?>>Returned to Marketing</option>
             <option value="resubmitted" <?= ($filters['status'] ?? '') === 'resubmitted' ? 'selected' : '' ?>>Resubmitted</option>
             <option value="approved" <?= in_array($filters['status'] ?? '', ['approved', 'completed', 'verified'], true) ? 'selected' : '' ?>>Approved by Project Management</option>
+            <option value="ready_for_admin_finance" <?= in_array($filters['status'] ?? '', ['ready_for_admin_finance', 'ready_forward'], true) ? 'selected' : '' ?>>Ready for Admin Finance</option>
             <option value="forwarded_to_admin_finance" <?= in_array($filters['status'] ?? '', ['forwarded_to_admin_finance', 'forwarded'], true) ? 'selected' : '' ?>>Forwarded to Admin Finance</option>
         </select>
 

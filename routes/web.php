@@ -47,13 +47,13 @@ $router->get('/notifications', [NotificationController::class, 'index'], [AuthMi
 $router->post('/notifications/read-all', [NotificationController::class, 'markAllRead'], [AuthMiddleware::class]);
 $router->post('/notifications/{id}/read', [NotificationController::class, 'markRead'], [AuthMiddleware::class]);
 
-// Marketing Department Module Routes
+
 $router->get('/marketing/dashboard', [MarketingController::class, 'dashboard'], [AuthMiddleware::class]);
 $router->get('/marketing/projects', [MarketingController::class, 'projects'], [AuthMiddleware::class]);
 $router->get('/marketing/projects/create', [MarketingController::class, 'createProject'], [AuthMiddleware::class]);
 $router->post('/marketing/projects', [MarketingController::class, 'storeProject'], [AuthMiddleware::class]);
 
-// Project Management Department Module Routes
+
 $router->get('/pm/dashboard', [ProjectManagementController::class, 'dashboard'], [AuthMiddleware::class]);
 $router->get('/pm/projects', [ProjectManagementController::class, 'projects'], [AuthMiddleware::class]);
 
