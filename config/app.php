@@ -43,6 +43,15 @@ return [
                 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                 'application/zip',
             ],
+            'csv' => [
+                'text/csv',
+                'text/plain',
+                'application/csv',
+                'text/x-csv',
+                'application/vnd.ms-excel',
+                'text/comma-separated-values',
+                'application/octet-stream',
+            ],
         ],
         'document_categories' => [
             'SON' => 'SON — Service On Notice',

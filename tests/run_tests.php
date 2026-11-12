@@ -1137,6 +1137,44 @@ try {
             && $opsRawRes['status'] === 403,
             'In-App Document Viewer renders interactive HTML canvas for web browsers and provides authorized raw stream route'
         );
+
+        // Verify CSV file viewing as Excel workbook
+        $csvContent = "Item,Qty,Unit Price,Total\nSolar Panel 550W,10,5000,50000\nInverter 10kW,1,85000,85000";
+        $csvFileName = 'test_bom_' . bin2hex(random_bytes(4)) . '.csv';
+        $csvFilePath = BASE_PATH . '/storage/documents/' . $csvFileName;
+        file_put_contents($csvFilePath, $csvContent);
+        $createdFilesOnDisk[] = $csvFilePath;
+
+        $csvDocStmt = $pdo->prepare(
+            "INSERT INTO project_documents (project_id, document_type, original_filename, stored_filename, file_path, file_size, mime_type, version_number, is_current, review_status, uploaded_by, created_at)
+             VALUES (:pid, 'BOM', :orig, :stored, :path, :size, 'text/csv', 99, 0, 'uploaded', :uid, NOW())"
+        );
+        $csvDocStmt->execute([
+            'pid' => $projectId,
+            'orig' => 'test_materials_list.csv',
+            'stored' => $csvFileName,
+            'path' => $csvFileName,
+            'size' => strlen($csvContent),
+            'uid' => (int) $mktUserRow['id'],
+        ]);
+        $csvDocId = (int) $pdo->lastInsertId();
+
+        $csvViewRes = $pmClient->request(
+            'GET',
+            "/projects/{$projectId}/documents/{$csvDocId}/view",
+            [],
+            [],
+            ['Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8']
+        );
+
+        assertCheck(
+            $csvViewRes['status'] === 200
+            && str_contains($csvViewRes['body'], 'data-category="excel"')
+            && str_contains($csvViewRes['body'], 'bms-excel-frame')
+            && str_contains($csvViewRes['body'], 'excel-viewer-container')
+            && str_contains($csvViewRes['body'], 'xlsx.full.min.js'),
+            'Uploaded CSV documents render in the interactive Microsoft Excel spreadsheet viewer with Excel grid and SheetJS'
+        );
     }
 
     // 10. Marketing Dashboard Statistics, Project List Filters/Search/Sort & Notifications

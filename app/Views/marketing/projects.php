@@ -23,7 +23,7 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
 };
 ?>
 
-<!-- Unified Nuclias-Style Filter Toolbar, Striped Table & Pagination Panel -->
+
 <div class="bms-table-panel">
     <form method="GET" action="<?= url('/marketing/projects') ?>" class="bms-table-toolbar">
         <h3 class="h6 fw-bold mb-0 me-auto">Project List</h3>
@@ -65,7 +65,7 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
         <?php endif; ?>
 
         <?php if (!empty($canRegisterProject)): ?>
-            <a href="<?= url('/marketing/projects/create') ?>" class="bms-toolbar-icon-btn bms-toolbar-icon-btn--primary" title="Register Marketing Project" aria-label="Register Marketing Project">
+            <a href="<?= url('/marketing/projects/create') ?>" class="bms-toolbar-icon-btn bms-toolbar-icon-btn--primary" title="Add Project" aria-label="Add Project">
                 <?= bms_icon('plus', 16) ?>
             </a>
         <?php endif; ?>

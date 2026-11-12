@@ -221,5 +221,38 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
     });
+
+    // Single-icon direct document upload handler
+    document.addEventListener('click', function (e) {
+        var uploadBtn = e.target.closest('.bms-doc-upload-btn');
+        if (!uploadBtn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        var targetId = uploadBtn.getAttribute('data-target-input');
+        if (targetId) {
+            var fileInput = document.getElementById(targetId);
+            if (fileInput) {
+                fileInput.click();
+            }
+        }
+    });
+
+    document.addEventListener('change', function (e) {
+        var input = e.target;
+        if (!input || !input.classList.contains('bms-doc-file-input')) return;
+        if (!input.files || input.files.length === 0) return;
+
+        var form = input.closest('form');
+        if (!form) return;
+
+        var btn = form.querySelector('.bms-doc-upload-btn');
+        if (btn) {
+            btn.disabled = true;
+            btn.classList.add('opacity-50');
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" style="width: 14px; height: 14px; border-width: 2px;"></span>';
+        }
+
+        form.submit();
+    });
 });
 

@@ -213,117 +213,391 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
     </div>
 <?php endif; ?>
 
-<div class="row g-4">
-    <!-- Left Column: Project Record, Workflow Actions & PM Review Panels -->
-    <div class="col-12 col-xl-5">
-        <!-- Project Registration & Verification Summary -->
-        <div class="bms-card p-4 mb-4">
-            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
-                <h3 class="h6 fw-bold text-uppercase text-secondary mb-0" style="letter-spacing: 0.04em;">Project Registration &amp; Workflow Summary</h3>
-                <span class="badge badge-soft-secondary"><?= e($checklist['workflow_name'] ?? 'Standard Project Workflow') ?></span>
-            </div>
-
-            <div class="row g-3 small">
-                <div class="col-12 col-md-6">
-                    <div class="text-secondary fw-semibold mb-1">Internal Project Code</div>
-                    <div class="font-monospace fw-semibold"><?= e($project['project_code']) ?></div>
-                </div>
-
-                <div class="col-12 col-md-6">
-                    <div class="text-secondary fw-semibold mb-1">Job Order Memorandum (JOM) Number</div>
-                    <?php if (!empty($project['jom_number'])): ?>
-                        <div class="font-monospace fw-bold text-primary fs-5"><?= e($project['jom_number']) ?></div>
-                        <div class="text-secondary" style="font-size: 0.75rem;">
-                            Issued by <?= e($project['jom_issuer_name'] ?: 'Admin Finance') ?> on <?= format_datetime((string) $project['jom_issued_at']) ?>
-                        </div>
-                    <?php else: ?>
-                        <div class="text-secondary fst-italic">Not Yet Assigned</div>
-                        <div class="text-secondary" style="font-size: 0.75rem;">
-                            Issued by Admin Finance after Project Management approval and handoff.
-                        </div>
-                    <?php endif; ?>
-                </div>
-
-                <div class="col-12 col-md-6">
-                    <div class="text-secondary fw-semibold mb-1">Current Department Custody</div>
-                    <div>
-                        <?php if (!empty($project['current_department_name'])): ?>
-                            <?= e($project['current_department_name']) ?>
-                            <span class="badge badge-soft-secondary ms-1"><?= e($project['current_department_code']) ?></span>
-                        <?php else: ?>
-                            Unassigned
-                        <?php endif; ?>
-                    </div>
-                    <?php if (!empty($project['origin_department_name'])): ?>
-                        <div class="text-secondary" style="font-size: 0.75rem;">Origin Department: <?= e($project['origin_department_name']) ?></div>
-                    <?php endif; ?>
-                </div>
-
-                <div class="col-12 col-md-6">
-                    <div class="text-secondary fw-semibold mb-1">Client Name</div>
-                    <div class="fw-medium"><?= e($project['client_name']) ?></div>
-                </div>
-
-                <div class="col-12 col-md-6">
-                    <div class="text-secondary fw-semibold mb-1">Client Contact</div>
-                    <div><?= e($project['client_contact'] ?: 'Not specified') ?></div>
-                </div>
-
-                <div class="col-12 col-md-6">
-                    <div class="text-secondary fw-semibold mb-1">Project Location</div>
-                    <div><?= e($project['project_location'] ?: 'Not specified') ?></div>
-                </div>
-
-                <div class="col-12 col-md-6">
-                    <div class="text-secondary fw-semibold mb-1">PM Document Verification Status</div>
-                    <div class="fw-medium"><?= e($verificationLabel) ?></div>
-                    <div class="text-secondary" style="font-size: 0.74rem;">Uploading a file marks it Uploaded/Replaced, not PM-approved.</div>
-                </div>
-
-                <?php if ($purchaseRequest !== null): ?>
-                    <div class="col-12 col-md-6">
-                        <div class="text-secondary fw-semibold mb-1">Operations Purchase Request (PR)</div>
-                        <div class="font-monospace fw-semibold"><?= e($purchaseRequest['pr_number']) ?></div>
-                        <div>
-                            <span class="badge <?= pr_status_badge_class((string) $purchaseRequest['status']) ?>"><?= e($purchaseRequest['status']) ?></span>
-                            <span class="text-secondary small">(<?= count($purchaseRequest['items'] ?? []) ?> items)</span>
-                        </div>
-                    </div>
-                <?php endif; ?>
-
-                <?php if ($actualBom !== null): ?>
-                    <div class="col-12 col-md-6">
-                        <div class="text-secondary fw-semibold mb-1">OPS Finance Actual BOM</div>
-                        <div class="font-monospace fw-semibold"><?= e($actualBom['actual_bom_number']) ?> (v<?= (int) ($actualBom['version_number'] ?? 1) ?>)</div>
-                        <div>
-                            <span class="badge <?= actual_bom_status_badge_class((string) $actualBom['status']) ?>"><?= e($actualBom['status']) ?></span>
-                        </div>
-                    </div>
-                <?php endif; ?>
-
-                <div class="col-12">
-                    <div class="text-secondary fw-semibold mb-1">Project Scope / Description</div>
-                    <div class="bg-light rounded p-3 text-dark" style="white-space: pre-line;"><?= e($project['project_description'] ?: 'No description provided.') ?></div>
-                </div>
-            </div>
-
-            <div class="row g-2 mt-3 pt-3 border-top text-secondary" style="font-size: 0.8rem;">
-                <div class="col-12 col-md-4">
-                    <strong>Created:</strong> <?= format_datetime($project['created_at']) ?>
-                </div>
-                <div class="col-12 col-md-4">
-                    <strong>Last Updated:</strong> <?= format_datetime($project['updated_at']) ?>
-                </div>
-                <div class="col-12 col-md-4">
-                    <strong>Submitted to PM:</strong> <?= format_datetime($project['submitted_at'] ?? null) ?>
-                    <?php if (!empty($project['submitter_name'])): ?>
-                        (<?= e($project['submitter_name']) ?>)
-                    <?php endif; ?>
-                </div>
+<!-- Marketing Document Checklist Table Panel -->
+<div id="checklist" class="bms-table-panel mb-4">
+    <div class="bms-table-toolbar bms-table-toolbar--split">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <h3 class="h6 fw-bold mb-0">Marketing Document Checklist</h3>
+            <span class="badge <?= $isChecklistComplete ? 'badge-soft-success' : 'badge-soft-warning' ?>">
+                <?= $uploadedRequiredCount ?>/<?= $requiredCount ?> Required Uploaded (<?= $completionPercent ?>%)
+            </span>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+            <div class="text-secondary small me-1">Completion:</div>
+            <div class="progress" style="width: 140px; height: 7px;">
+                <div
+                    class="progress-bar <?= $isChecklistComplete ? 'bg-success' : 'bg-primary' ?>"
+                    role="progressbar"
+                    style="width: <?= $completionPercent ?>%;"
+                    aria-valuenow="<?= $completionPercent ?>"
+                    aria-valuemin="0"
+                    aria-valuemax="100"
+                ></div>
             </div>
         </div>
+    </div>
 
-        <!-- Document Completeness Validation & Submit to Project Management Panel -->
+    <div class="table-responsive">
+        <table class="table mb-0">
+            <thead>
+                <tr>
+                    <th style="width: 25%; min-width: 180px;">Checklist Document</th>
+                    <th style="width: 12%; min-width: 100px;">Status</th>
+                    <th style="width: 28%; min-width: 200px;">Current File</th>
+                    <th style="width: 10%; min-width: 80px;">Version</th>
+                    <th style="width: 15%; min-width: 130px;">Uploaded By / Date</th>
+                    <th class="text-end" style="width: 10%; min-width: 100px;">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php $rowIdx = 0; ?>
+                <?php foreach ($checklistItems as $docType => $item): ?>
+                    <?php
+                    $rowIdx++;
+                    $currentDoc = $item['current'] ?? null;
+                    $historyDocs = $item['history'] ?? [];
+                    $historyCount = (int) ($item['history_count'] ?? 0);
+                    $docStatus = (string) ($item['status'] ?? 'Missing');
+                    $isFlagged = !empty($item['flagged_for_attention']);
+                    $updatedSinceReturn = !empty($item['updated_since_return']);
+                    $uploadPanelId = 'checklist-upload-panel-' . $rowIdx;
+                    $historyPanelId = 'checklist-history-panel-' . $rowIdx;
+                    $isRowUploadOpen = $resolvedOpenUploadType === (string) $docType;
+                    $isRowHistoryOpen = $requestedHistoryType === (string) $docType;
+                    $zebraClass = ($rowIdx % 2 === 1) ? 'bms-row-odd' : 'bms-row-even';
+                    $rowClass = ($isFlagged && !$updatedSinceReturn)
+                        ? 'checklist-row-attention'
+                        : $zebraClass;
+                    $canDownloadRowDoc = !empty($canDownloadDocument)
+                        && (empty($isOperationsUser) || in_array((string) $docType, ['SLD', 'BOM'], true));
+                    ?>
+                    <tr class="<?= $rowClass ?>">
+                        <td>
+                            <div class="d-flex flex-wrap align-items-center gap-1">
+                                <span class="fw-semibold text-dark"><?= e((string) $item['code']) ?></span>
+                                <?php if (!empty($item['required'])): ?>
+                                    <span class="badge badge-soft-secondary" style="font-size: 0.68rem;">Required</span>
+                                <?php endif; ?>
+                                <?php if ($isFlagged && !$updatedSinceReturn): ?>
+                                    <span class="badge bg-danger" style="font-size: 0.68rem;">Needs Attention</span>
+                                <?php elseif ($isFlagged && $updatedSinceReturn): ?>
+                                    <span class="badge badge-soft-success" style="font-size: 0.68rem;">Updated Since Return</span>
+                                <?php endif; ?>
+                            </div>
+                            <?php if (!empty($item['subtitle']) && $item['subtitle'] !== $item['code']): ?>
+                                <div class="text-secondary small"><?= e((string) $item['subtitle']) ?></div>
+                            <?php endif; ?>
+                        </td>
+
+                        <td>
+                            <span class="badge <?= checklist_status_badge_class($docStatus) ?>"><?= e($docStatus) ?></span>
+                        </td>
+
+                        <td>
+                            <?php if ($currentDoc !== null): ?>
+                                <?php if ($canDownloadRowDoc): ?>
+                                    <a href="<?= url('/projects/' . $projectId . '/documents/' . (int) $currentDoc['id'] . '/view') ?>"
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       class="bms-doc-view-trigger fw-medium text-break text-decoration-none text-dark hover-primary d-inline-flex align-items-center gap-1"
+                                       title="Click to view/preview document in system"
+                                       data-doc-id="<?= (int) $currentDoc['id'] ?>"
+                                       data-doc-type="<?= e($currentDoc['document_type']) ?>"
+                                       data-filename="<?= e($currentDoc['original_filename']) ?>"
+                                       data-version="v<?= (int) $currentDoc['version_number'] ?>"
+                                       data-size="<?= format_bytes((int) $currentDoc['file_size']) ?>"
+                                       data-raw-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $currentDoc['id'] . '/raw') ?>"
+                                       data-view-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $currentDoc['id'] . '/view') ?>"
+                                       data-download-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $currentDoc['id'] . '/download') ?>">
+                                        <span><?= e($currentDoc['original_filename']) ?></span>
+                                        <span class="text-primary small" style="font-size: 0.72rem;">&nearr;</span>
+                                    </a>
+                                <?php else: ?>
+                                    <div class="fw-medium text-break"><?= e($currentDoc['original_filename']) ?></div>
+                                <?php endif; ?>
+                                <div class="text-secondary small"><?= format_bytes((int) $currentDoc['file_size']) ?></div>
+                                <?php if (!empty($currentDoc['upload_notes'])): ?>
+                                    <div class="text-secondary fst-italic small">
+                                        Note: <?= e($currentDoc['upload_notes']) ?>
+                                    </div>
+                                <?php endif; ?>
+                            <?php else: ?>
+                                <span class="text-secondary fst-italic small">No file uploaded</span>
+                            <?php endif; ?>
+                        </td>
+
+                        <td>
+                            <?php if ($currentDoc !== null): ?>
+                                <span class="badge badge-soft-secondary">v<?= (int) $currentDoc['version_number'] ?></span>
+                                <?php if ($historyCount > 0): ?>
+                                    <div class="text-secondary small">+<?= $historyCount ?> prior</div>
+                                <?php endif; ?>
+                            <?php else: ?>
+                                <span class="text-secondary small">—</span>
+                            <?php endif; ?>
+                        </td>
+
+                        <td class="small">
+                            <?php if ($currentDoc !== null): ?>
+                                <div class="fw-medium text-dark"><?= e($currentDoc['uploader_name']) ?></div>
+                                <div class="text-secondary"><?= format_datetime($currentDoc['created_at']) ?></div>
+                            <?php else: ?>
+                                <span class="text-secondary">—</span>
+                            <?php endif; ?>
+                        </td>
+
+                        <td class="text-end">
+                            <div class="bms-action-group">
+                                <?php if (!empty($canUploadDocument)): ?>
+                                    <form method="POST" action="<?= url('/projects/' . $projectId . '/documents') ?>" enctype="multipart/form-data" class="d-inline m-0 p-0 bms-doc-upload-form">
+                                        <?= csrf_field() ?>
+                                        <input type="hidden" name="document_type" value="<?= e((string) $docType) ?>">
+                                        <input type="file"
+                                               id="upload-doc-input-<?= $rowIdx ?>"
+                                               name="document"
+                                               class="d-none bms-doc-file-input"
+                                               accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.csv"
+                                               data-doc-code="<?= e((string) $item['code']) ?>">
+                                        <button type="button"
+                                                class="bms-action-icon bms-action-icon--primary bms-doc-upload-btn"
+                                                title="<?= $currentDoc === null ? 'Upload ' . e($item['code']) : 'Replace / Re-upload ' . e($item['code']) ?>"
+                                                aria-label="Upload <?= e($item['code']) ?>"
+                                                data-target-input="upload-doc-input-<?= $rowIdx ?>">
+                                            <?= bms_icon('upload', 16) ?>
+                                        </button>
+                                    </form>
+                                <?php endif; ?>
+
+                                <?php if ($currentDoc !== null && $canDownloadRowDoc): ?>
+                                    <a href="<?= url('/projects/' . $projectId . '/documents/' . (int) $currentDoc['id'] . '/view') ?>"
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       class="bms-action-icon bms-action-icon--secondary bms-doc-view-trigger"
+                                       title="View / Inspect Document"
+                                       aria-label="View / Inspect Document"
+                                       data-doc-id="<?= (int) $currentDoc['id'] ?>"
+                                       data-doc-type="<?= e($currentDoc['document_type']) ?>"
+                                       data-filename="<?= e($currentDoc['original_filename']) ?>"
+                                       data-version="v<?= (int) $currentDoc['version_number'] ?>"
+                                       data-size="<?= format_bytes((int) $currentDoc['file_size']) ?>"
+                                       data-raw-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $currentDoc['id'] . '/raw') ?>"
+                                       data-view-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $currentDoc['id'] . '/view') ?>"
+                                       data-download-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $currentDoc['id'] . '/download') ?>">
+                                        <?= bms_icon('eye') ?>
+                                    </a>
+                                    <a href="<?= url('/projects/' . $projectId . '/documents/' . (int) $currentDoc['id'] . '/download') ?>"
+                                       class="bms-action-icon bms-action-icon--secondary"
+                                       title="Download Current File"
+                                       aria-label="Download Current File">
+                                        <?= bms_icon('download') ?>
+                                    </a>
+                                <?php endif; ?>
+
+                                <?php if ($historyCount > 0): ?>
+                                    <a href="<?= url('/projects/' . $projectId . '?history=' . rawurlencode((string) $docType) . '#checklist') ?>"
+                                       class="bms-action-icon"
+                                       title="Version History (<?= $historyCount ?>)"
+                                       aria-label="Version History (<?= $historyCount ?>)"
+                                       data-toggle-panel="<?= e($historyPanelId) ?>"
+                                       aria-expanded="<?= $isRowHistoryOpen ? 'true' : 'false' ?>">
+                                        <?= bms_icon('history') ?>
+                                    </a>
+                                <?php endif; ?>
+                            </div>
+                        </td>
+                    </tr>
+
+
+                    <?php if ($historyCount > 0): ?>
+                        <tr id="<?= e($historyPanelId) ?>" class="checklist-subrow <?= $isRowHistoryOpen ? '' : 'd-none' ?>">
+                            <td colspan="6" class="px-4 py-3">
+                                <div class="small fw-semibold text-secondary mb-2">
+                                    Preserved Previous Versions for <?= e((string) $item['code']) ?> (<?= $historyCount ?>)
+                                </div>
+                                <div class="table-responsive">
+                                    <table class="table table-sm bg-white mb-0 small">
+                                        <thead>
+                                            <tr>
+                                                <th>Ver.</th>
+                                                <th>Original Filename</th>
+                                                <th>Size</th>
+                                                <th>Uploaded By</th>
+                                                <th>Uploaded At</th>
+                                                <th>Notes</th>
+                                                <th class="text-end">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($historyDocs as $hist): ?>
+                                                <tr>
+                                                    <td><span class="badge badge-soft-secondary">v<?= (int) $hist['version_number'] ?></span></td>
+                                                    <td>
+                                                        <?php if ($canDownloadRowDoc): ?>
+                                                            <a href="<?= url('/projects/' . $projectId . '/documents/' . (int) $hist['id'] . '/view') ?>"
+                                                               target="_blank"
+                                                               rel="noopener noreferrer"
+                                                               class="bms-doc-view-trigger text-dark text-decoration-none fw-medium hover-primary d-inline-flex align-items-center gap-1"
+                                                               title="View v<?= (int) $hist['version_number'] ?>"
+                                                               data-doc-id="<?= (int) $hist['id'] ?>"
+                                                               data-doc-type="<?= e($hist['document_type']) ?>"
+                                                               data-filename="<?= e($hist['original_filename']) ?>"
+                                                               data-version="v<?= (int) $hist['version_number'] ?>"
+                                                               data-size="<?= format_bytes((int) $hist['file_size']) ?>"
+                                                               data-raw-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $hist['id'] . '/raw') ?>"
+                                                               data-view-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $hist['id'] . '/view') ?>"
+                                                               data-download-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $hist['id'] . '/download') ?>">
+                                                                <span><?= e($hist['original_filename']) ?></span>
+                                                                <span class="text-primary small" style="font-size: 0.7rem;">&nearr;</span>
+                                                            </a>
+                                                        <?php else: ?>
+                                                            <?= e($hist['original_filename']) ?>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                    <td class="text-secondary"><?= format_bytes((int) $hist['file_size']) ?></td>
+                                                    <td><?= e($hist['uploader_name']) ?></td>
+                                                    <td class="text-secondary"><?= format_datetime($hist['created_at']) ?></td>
+                                                    <td class="text-secondary"><?= e($hist['upload_notes'] ?: '—') ?></td>
+                                                    <td class="text-end text-nowrap">
+                                                        <?php if ($canDownloadRowDoc): ?>
+                                                            <a href="<?= url('/projects/' . $projectId . '/documents/' . (int) $hist['id'] . '/view') ?>"
+                                                               target="_blank"
+                                                               rel="noopener noreferrer"
+                                                               class="bms-action-icon bms-action-icon--primary bms-doc-view-trigger"
+                                                               title="View v<?= (int) $hist['version_number'] ?>"
+                                                               aria-label="View v<?= (int) $hist['version_number'] ?>"
+                                                               data-doc-id="<?= (int) $hist['id'] ?>"
+                                                               data-doc-type="<?= e($hist['document_type']) ?>"
+                                                               data-filename="<?= e($hist['original_filename']) ?>"
+                                                               data-version="v<?= (int) $hist['version_number'] ?>"
+                                                               data-size="<?= format_bytes((int) $hist['file_size']) ?>"
+                                                               data-raw-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $hist['id'] . '/raw') ?>"
+                                                               data-view-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $hist['id'] . '/view') ?>"
+                                                               data-download-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $hist['id'] . '/download') ?>">
+                                                                <?= bms_icon('eye') ?>
+                                                            </a>
+                                                            <a href="<?= url('/projects/' . $projectId . '/documents/' . (int) $hist['id'] . '/download') ?>"
+                                                               class="bms-action-icon bms-action-icon--secondary"
+                                                               title="Download v<?= (int) $hist['version_number'] ?>"
+                                                               aria-label="Download v<?= (int) $hist['version_number'] ?>">
+                                                                <?= bms_icon('download') ?>
+                                                            </a>
+                                                        <?php endif; ?>
+                                                    </td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </td>
+                        </tr>
+                    <?php endif; ?>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Optional Supplementary / General Attachments -->
+    <?php if ($supplementaryDocs !== [] || !empty($canUploadDocument)): ?>
+        <div class="p-3 px-4 border-top bg-light">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <div class="small">
+                    <strong>Supplementary Attachments (Optional):</strong>
+                    <span class="text-secondary">Additional supporting files outside the 6 mandatory checklist items.</span>
+                </div>
+                <?php if (!empty($canUploadDocument)): ?>
+                    <a
+                        href="<?= url('/projects/' . $projectId . '?upload=' . rawurlencode('General Attachment') . '#checklist') ?>"
+                        class="btn btn-light btn-sm border"
+                        data-toggle-panel="supplementary-upload-panel"
+                        aria-expanded="<?= $resolvedOpenUploadType === 'General Attachment' ? 'true' : 'false' ?>"
+                    >
+                        + Add Supplementary File
+                    </a>
+                <?php endif; ?>
+            </div>
+
+            <?php if (!empty($canUploadDocument)): ?>
+                <div id="supplementary-upload-panel" class="mt-3 pt-3 border-top <?= $resolvedOpenUploadType === 'General Attachment' ? '' : 'd-none' ?>">
+                    <form method="POST" action="<?= url('/projects/' . $projectId . '/documents') ?>" enctype="multipart/form-data" class="row g-2 align-items-end">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="document_type" value="General Attachment">
+                        <div class="col-12 col-md-5">
+                            <label class="form-label small fw-medium mb-1">Supplementary File</label>
+                            <input type="file" name="document" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.csv" required>
+                        </div>
+                        <div class="col-12 col-md-5">
+                            <label class="form-label small text-secondary mb-1">Description / Notes</label>
+                            <input type="text" name="upload_notes" maxlength="255" class="form-control form-control-sm" placeholder="Optional attachment note">
+                        </div>
+                        <div class="col-12 col-md-2 d-grid">
+                            <button type="submit" class="btn btn-secondary btn-sm">Attach</button>
+                        </div>
+                    </form>
+                </div>
+            <?php endif; ?>
+
+            <?php if ($supplementaryDocs !== []): ?>
+                <ul class="list-group list-group-flush mt-2 rounded border">
+                    <?php foreach ($supplementaryDocs as $sDoc): ?>
+                        <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2 small py-2">
+                            <div>
+                                <span class="badge badge-soft-secondary me-1">v<?= (int) $sDoc['version_number'] ?></span>
+                                <?php if (!empty($canDownloadDocument)): ?>
+                                    <a href="<?= url('/projects/' . $projectId . '/documents/' . (int) $sDoc['id'] . '/view') ?>"
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       class="bms-doc-view-trigger text-dark text-decoration-none fw-bold hover-primary"
+                                       title="View attachment"
+                                       data-doc-id="<?= (int) $sDoc['id'] ?>"
+                                       data-doc-type="<?= e($sDoc['document_type']) ?>"
+                                       data-filename="<?= e($sDoc['original_filename']) ?>"
+                                       data-version="v<?= (int) $sDoc['version_number'] ?>"
+                                       data-size="<?= format_bytes((int) $sDoc['file_size']) ?>"
+                                       data-raw-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $sDoc['id'] . '/raw') ?>"
+                                       data-view-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $sDoc['id'] . '/view') ?>"
+                                       data-download-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $sDoc['id'] . '/download') ?>">
+                                        <?= e($sDoc['original_filename']) ?> &nearr;
+                                    </a>
+                                <?php else: ?>
+                                    <strong><?= e($sDoc['original_filename']) ?></strong>
+                                <?php endif; ?>
+                                <span class="text-secondary ms-1">(<?= format_bytes((int) $sDoc['file_size']) ?> &bull; <?= e($sDoc['uploader_name']) ?>)</span>
+                            </div>
+                            <?php if (!empty($canDownloadDocument)): ?>
+                                <div class="bms-action-group">
+                                    <a href="<?= url('/projects/' . $projectId . '/documents/' . (int) $sDoc['id'] . '/view') ?>"
+                                       target="_blank"
+                                       rel="noopener noreferrer"
+                                       class="bms-action-icon bms-action-icon--primary bms-doc-view-trigger"
+                                       title="View Attachment"
+                                       aria-label="View Attachment"
+                                       data-doc-id="<?= (int) $sDoc['id'] ?>"
+                                       data-doc-type="<?= e($sDoc['document_type']) ?>"
+                                       data-filename="<?= e($sDoc['original_filename']) ?>"
+                                       data-version="v<?= (int) $sDoc['version_number'] ?>"
+                                       data-size="<?= format_bytes((int) $sDoc['file_size']) ?>"
+                                       data-raw-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $sDoc['id'] . '/raw') ?>"
+                                       data-view-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $sDoc['id'] . '/view') ?>"
+                                       data-download-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $sDoc['id'] . '/download') ?>">
+                                        <?= bms_icon('eye') ?>
+                                    </a>
+                                    <a href="<?= url('/projects/' . $projectId . '/documents/' . (int) $sDoc['id'] . '/download') ?>"
+                                       class="bms-action-icon bms-action-icon--secondary"
+                                       title="Download Attachment"
+                                       aria-label="Download Attachment">
+                                        <?= bms_icon('download') ?>
+                                    </a>
+                                </div>
+                            <?php endif; ?>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            <?php endif; ?>
+        </div>
+    <?php endif; ?>
+</div>
+
+<!-- Document Completeness Validation & Submit to Project Management Panel -->
         <?php if (!empty($canSubmit)): ?>
             <div id="submission-panel" class="bms-card p-4 mb-4 border-start border-4 <?= $isChecklistComplete ? 'border-success' : 'border-warning' ?>">
                 <h3 class="h6 fw-bold mb-2">
@@ -356,11 +630,6 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
                         <textarea id="submission_notes" name="submission_notes" rows="2" maxlength="1000" class="form-control form-control-sm" placeholder="Summarize document package highlights or revision notes for PM..."></textarea>
                     </div>
                     <div class="d-flex flex-wrap gap-2">
-                        <?php if (!$isChecklistComplete): ?>
-                            <a href="<?= url('/projects/' . $projectId . '?upload=auto#checklist') ?>" class="btn btn-primary btn-sm fw-semibold">
-                                Upload
-                            </a>
-                        <?php endif; ?>
                         <button type="submit" class="btn <?= $isChecklistComplete ? 'btn-success' : 'btn-outline-secondary btn-sm' ?> fw-semibold">
                             <?= in_array($status, ['Returned for Corrections', 'Returned to Marketing for Corrections'], true) ? 'Resubmit' : 'Submit' ?>
                         </button>
@@ -831,10 +1100,6 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
                 </div>
             </div>
         <?php endif; ?>
-    </div>
-
-    <!-- Right Column: Operations Handoff Package & Marketing Document Checklist -->
-    <div class="col-12 col-xl-7">
         <?php if ($isForwardedToOps || !empty($isOperationsUser)): ?>
             <!-- Operations Handoff Package (JOM Number, SLD & Marketing BOM) -->
             <div id="operations-handoff-package" class="bms-card p-4 mb-4 border-start border-4 border-info">
@@ -1494,7 +1759,7 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
                                 </div>
                                 <div class="col-12">
                                     <label for="pr_attachment" class="form-label small fw-semibold mb-1">PR Supporting Document (Optional)</label>
-                                    <input type="file" id="pr_attachment" name="pr_attachment" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+                                    <input type="file" id="pr_attachment" name="pr_attachment" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.csv">
                                     <div class="text-secondary" style="font-size: 0.72rem;">Optional signed PR voucher or technical schedule. Max <?= e((string) $maxUploadMb) ?> MB.</div>
                                 </div>
                             </div>
@@ -1910,12 +2175,12 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
                                     <label for="actual_bom_file" class="form-label small fw-semibold mb-1">
                                         Actual BOM Document File <?= ($actualBom === null || empty($actualBom['document_id']) || ($actualBom['status'] ?? '') === 'Returned for Corrections') ? '<span class="text-danger">*</span>' : '(Optional replacement)' ?>
                                     </label>
-                                    <input type="file" id="actual_bom_file" name="actual_bom_file" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" <?= ($actualBom === null || empty($actualBom['document_id']) || ($actualBom['status'] ?? '') === 'Returned for Corrections') ? 'required' : '' ?>>
-                                    <div class="text-secondary" style="font-size: 0.72rem;">Excel, PDF, or Word. Preserves all versions in project documents.</div>
+                                    <input type="file" id="actual_bom_file" name="actual_bom_file" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.csv" <?= ($actualBom === null || empty($actualBom['document_id']) || ($actualBom['status'] ?? '') === 'Returned for Corrections') ? 'required' : '' ?>>
+                                    <div class="text-secondary" style="font-size: 0.72rem;">Excel, CSV, PDF, or Word. Preserves all versions in project documents.</div>
                                 </div>
                                 <div class="col-12 col-md-6">
                                     <label for="supporting_file" class="form-label small fw-semibold mb-1">Supporting Technical Document (Optional)</label>
-                                    <input type="file" id="supporting_file" name="supporting_file" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx">
+                                    <input type="file" id="supporting_file" name="supporting_file" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.csv">
                                     <div class="text-secondary" style="font-size: 0.72rem;">Optional spec sheet, cut sheet, or technical schedule.</div>
                                 </div>
                             </div>
@@ -2706,450 +2971,6 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
             <?php endif; ?>
         </div>
         <?php endif; ?>
-        <!-- Marketing Document Checklist -->
-        <div id="checklist" class="bms-card mb-4">
-            <div class="p-3 px-4 border-bottom">
-                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-                    <div>
-                        <h3 class="h6 fw-bold mb-0">Marketing Document Checklist (<?= $uploadedRequiredCount ?>/<?= $requiredCount ?> Required Uploaded)</h3>
-                        <div class="text-secondary" style="font-size: 0.78rem;">
-                            Standard SYB Flowchart Marketing Deliverables &bull; Allowed formats: PDF, JPG, PNG, DOC/DOCX, XLS/XLSX (Max <?= e((string) $maxUploadMb) ?> MB)
-                        </div>
-                    </div>
-                    <span class="badge <?= $isChecklistComplete ? 'badge-soft-success' : 'badge-soft-warning' ?>">
-                        <?= $completionPercent ?>% Uploaded
-                    </span>
-                </div>
-                <div class="progress" style="height: 7px;">
-                    <div
-                        class="progress-bar <?= $isChecklistComplete ? 'bg-success' : 'bg-primary' ?>"
-                        role="progressbar"
-                        style="width: <?= $completionPercent ?>%;"
-                        aria-valuenow="<?= $completionPercent ?>"
-                        aria-valuemin="0"
-                        aria-valuemax="100"
-                    ></div>
-                </div>
-            </div>
-
-            <!-- Always-Ready Quick Upload / Replace Bar -->
-            <?php if (!empty($canUploadDocument)): ?>
-                <div class="p-3 px-4 bg-light border-bottom">
-                    <form method="POST" action="<?= url('/projects/' . $projectId . '/documents') ?>" enctype="multipart/form-data" class="row g-2 align-items-end">
-                        <?= csrf_field() ?>
-                        <div class="col-12 col-md-4">
-                            <label for="quick_document_type" class="form-label small fw-semibold mb-1">Checklist Document Type</label>
-                            <select id="quick_document_type" name="document_type" class="form-select form-select-sm" required>
-                                <?php foreach ($documentCategories as $catKey => $catLabel): ?>
-                                    <option value="<?= e((string) $catKey) ?>" <?= (string) $catKey === $quickSelectedDocType ? 'selected' : '' ?>>
-                                        <?= e((string) $catLabel) ?>
-                                    </option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
-
-                        <div class="col-12 col-md-4">
-                            <label for="quick_document_file" class="form-label small fw-semibold mb-1">Choose File</label>
-                            <input type="file" id="quick_document_file" name="document" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" required>
-                        </div>
-
-                        <div class="col-12 col-md-2">
-                            <label for="quick_upload_notes" class="form-label small text-secondary mb-1">Notes (Opt.)</label>
-                            <input type="text" id="quick_upload_notes" name="upload_notes" maxlength="255" class="form-control form-control-sm" placeholder="Version note">
-                        </div>
-
-                        <div class="col-12 col-md-2 d-grid">
-                            <button type="submit" class="btn btn-primary btn-sm fw-semibold">Upload File</button>
-                        </div>
-                    </form>
-                </div>
-            <?php endif; ?>
-
-            <div class="table-responsive px-3 pb-3 pt-2">
-                <table class="table bms-checklist-table mb-0">
-                    <thead>
-                        <tr>
-                            <th>Checklist Document</th>
-                            <th>Status</th>
-                            <th>Current File</th>
-                            <th>Version</th>
-                            <th>Uploaded By / Date</th>
-                            <th class="text-end">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php $rowIdx = 0; ?>
-                        <?php foreach ($checklistItems as $docType => $item): ?>
-                            <?php
-                            $rowIdx++;
-                            $currentDoc = $item['current'] ?? null;
-                            $historyDocs = $item['history'] ?? [];
-                            $historyCount = (int) ($item['history_count'] ?? 0);
-                            $docStatus = (string) ($item['status'] ?? 'Missing');
-                            $isFlagged = !empty($item['flagged_for_attention']);
-                            $updatedSinceReturn = !empty($item['updated_since_return']);
-                            $uploadPanelId = 'checklist-upload-panel-' . $rowIdx;
-                            $historyPanelId = 'checklist-history-panel-' . $rowIdx;
-                            $isRowUploadOpen = $resolvedOpenUploadType === (string) $docType;
-                            $isRowHistoryOpen = $requestedHistoryType === (string) $docType;
-                            $zebraClass = ($rowIdx % 2 === 1) ? 'bms-row-odd' : 'bms-row-even';
-                            $rowClass = ($isFlagged && !$updatedSinceReturn)
-                                ? 'checklist-row-attention'
-                                : $zebraClass;
-                            $canDownloadRowDoc = !empty($canDownloadDocument)
-                                && (empty($isOperationsUser) || in_array((string) $docType, ['SLD', 'BOM'], true));
-                            ?>
-                            <tr class="<?= $rowClass ?>">
-                                <td>
-                                    <div class="d-flex flex-wrap align-items-center gap-1">
-                                        <span class="fw-semibold"><?= e((string) $item['code']) ?></span>
-                                        <?php if (!empty($item['required'])): ?>
-                                            <span class="badge badge-soft-secondary" style="font-size: 0.68rem;">Required</span>
-                                        <?php endif; ?>
-                                        <?php if ($isFlagged && !$updatedSinceReturn): ?>
-                                            <span class="badge bg-danger" style="font-size: 0.68rem;">Needs Attention</span>
-                                        <?php elseif ($isFlagged && $updatedSinceReturn): ?>
-                                            <span class="badge badge-soft-success" style="font-size: 0.68rem;">Updated Since Return</span>
-                                        <?php endif; ?>
-                                    </div>
-                                    <?php if (!empty($item['subtitle']) && $item['subtitle'] !== $item['code']): ?>
-                                        <div class="text-secondary" style="font-size: 0.76rem;"><?= e((string) $item['subtitle']) ?></div>
-                                    <?php endif; ?>
-                                </td>
-
-                                <td>
-                                    <span class="badge <?= checklist_status_badge_class($docStatus) ?>"><?= e($docStatus) ?></span>
-                                </td>
-
-                                <td class="small">
-                                    <?php if ($currentDoc !== null): ?>
-                                        <?php if ($canDownloadRowDoc): ?>
-                                            <a href="<?= url('/projects/' . $projectId . '/documents/' . (int) $currentDoc['id'] . '/view') ?>"
-                                               target="_blank"
-                                               rel="noopener noreferrer"
-                                               class="bms-doc-view-trigger fw-medium text-break text-decoration-none text-dark hover-primary d-inline-flex align-items-center gap-1"
-                                               title="Click to view/preview document in system"
-                                               data-doc-id="<?= (int) $currentDoc['id'] ?>"
-                                               data-doc-type="<?= e($currentDoc['document_type']) ?>"
-                                               data-filename="<?= e($currentDoc['original_filename']) ?>"
-                                               data-version="v<?= (int) $currentDoc['version_number'] ?>"
-                                               data-size="<?= format_bytes((int) $currentDoc['file_size']) ?>"
-                                               data-raw-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $currentDoc['id'] . '/raw') ?>"
-                                               data-view-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $currentDoc['id'] . '/view') ?>"
-                                               data-download-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $currentDoc['id'] . '/download') ?>">
-                                                <span><?= e($currentDoc['original_filename']) ?></span>
-                                                <span class="text-primary small" style="font-size: 0.72rem;">&nearr;</span>
-                                            </a>
-                                        <?php else: ?>
-                                            <div class="fw-medium text-break"><?= e($currentDoc['original_filename']) ?></div>
-                                        <?php endif; ?>
-                                        <div class="text-secondary" style="font-size: 0.74rem;"><?= format_bytes((int) $currentDoc['file_size']) ?></div>
-                                        <?php if (!empty($currentDoc['upload_notes'])): ?>
-                                            <div class="text-secondary fst-italic mt-1" style="font-size: 0.75rem;">
-                                                Note: <?= e($currentDoc['upload_notes']) ?>
-                                            </div>
-                                        <?php endif; ?>
-                                    <?php else: ?>
-                                        <span class="text-secondary fst-italic">No file uploaded</span>
-                                    <?php endif; ?>
-                                </td>
-
-                                <td>
-                                    <?php if ($currentDoc !== null): ?>
-                                        <span class="badge badge-soft-secondary">v<?= (int) $currentDoc['version_number'] ?></span>
-                                        <?php if ($historyCount > 0): ?>
-                                            <div class="text-secondary mt-1" style="font-size: 0.72rem;">+<?= $historyCount ?> prior</div>
-                                        <?php endif; ?>
-                                    <?php else: ?>
-                                        <span class="text-secondary small">—</span>
-                                    <?php endif; ?>
-                                </td>
-
-                                <td class="small">
-                                    <?php if ($currentDoc !== null): ?>
-                                        <div><?= e($currentDoc['uploader_name']) ?></div>
-                                        <div class="text-secondary" style="font-size: 0.74rem;"><?= format_datetime($currentDoc['created_at']) ?></div>
-                                    <?php else: ?>
-                                        <span class="text-secondary">—</span>
-                                    <?php endif; ?>
-                                </td>
-
-                                <td class="text-end">
-                                    <div class="bms-action-group">
-                                        <?php if ($currentDoc !== null && $canDownloadRowDoc): ?>
-                                            <a href="<?= url('/projects/' . $projectId . '/documents/' . (int) $currentDoc['id'] . '/view') ?>"
-                                               target="_blank"
-                                               rel="noopener noreferrer"
-                                               class="bms-action-icon bms-action-icon--primary bms-doc-view-trigger"
-                                               title="View / Inspect Document"
-                                               aria-label="View / Inspect Document"
-                                               data-doc-id="<?= (int) $currentDoc['id'] ?>"
-                                               data-doc-type="<?= e($currentDoc['document_type']) ?>"
-                                               data-filename="<?= e($currentDoc['original_filename']) ?>"
-                                               data-version="v<?= (int) $currentDoc['version_number'] ?>"
-                                               data-size="<?= format_bytes((int) $currentDoc['file_size']) ?>"
-                                               data-raw-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $currentDoc['id'] . '/raw') ?>"
-                                               data-view-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $currentDoc['id'] . '/view') ?>"
-                                               data-download-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $currentDoc['id'] . '/download') ?>">
-                                                <?= bms_icon('eye') ?>
-                                            </a>
-                                            <a href="<?= url('/projects/' . $projectId . '/documents/' . (int) $currentDoc['id'] . '/download') ?>"
-                                               class="bms-action-icon bms-action-icon--secondary"
-                                               title="Download Current File"
-                                               aria-label="Download Current File">
-                                                <?= bms_icon('download') ?>
-                                            </a>
-                                        <?php endif; ?>
-
-                                        <?php if ($historyCount > 0): ?>
-                                            <a href="<?= url('/projects/' . $projectId . '?history=' . rawurlencode((string) $docType) . '#checklist') ?>"
-                                               class="bms-action-icon"
-                                               title="Version History (<?= $historyCount ?>)"
-                                               aria-label="Version History (<?= $historyCount ?>)"
-                                               data-toggle-panel="<?= e($historyPanelId) ?>"
-                                               aria-expanded="<?= $isRowHistoryOpen ? 'true' : 'false' ?>">
-                                                <?= bms_icon('history') ?>
-                                            </a>
-                                        <?php endif; ?>
-
-                                        <?php if (!empty($canUploadDocument)): ?>
-                                            <?php $uploadLabel = $currentDoc === null ? 'Upload ' . $item['code'] : 'Replace ' . $item['code']; ?>
-                                            <a href="<?= url('/projects/' . $projectId . '?upload=' . rawurlencode((string) $docType) . '#checklist') ?>"
-                                               class="bms-action-icon <?= $currentDoc === null ? 'bms-action-icon--warning' : 'bms-action-icon--primary' ?>"
-                                               title="<?= e($uploadLabel) ?>"
-                                               aria-label="<?= e($uploadLabel) ?>"
-                                               data-toggle-panel="<?= e($uploadPanelId) ?>"
-                                               aria-expanded="<?= $isRowUploadOpen ? 'true' : 'false' ?>">
-                                                <?= bms_icon($currentDoc === null ? 'upload' : 'replace') ?>
-                                            </a>
-                                        <?php endif; ?>
-                                    </div>
-                                </td>
-                            </tr>
-
-                            <?php if (!empty($canUploadDocument)): ?>
-                                <tr id="<?= e($uploadPanelId) ?>" class="checklist-subrow <?= $isRowUploadOpen ? '' : 'd-none' ?>">
-                                    <td colspan="6" class="p-3">
-                                        <form method="POST" action="<?= url('/projects/' . $projectId . '/documents') ?>" enctype="multipart/form-data" class="row g-2 align-items-end">
-                                            <?= csrf_field() ?>
-                                            <input type="hidden" name="document_type" value="<?= e((string) $docType) ?>">
-
-                                            <div class="col-12 col-md-5">
-                                                <label class="form-label small fw-semibold mb-1">
-                                                    <?= $currentDoc === null ? 'Upload' : 'Upload Replacement for' ?> <?= e((string) $item['code']) ?>
-                                                    <?php if ($currentDoc !== null): ?>
-                                                        <span class="text-secondary fw-normal">(creates v<?= (int) $currentDoc['version_number'] + 1 ?>, keeps v<?= (int) $currentDoc['version_number'] ?>)</span>
-                                                    <?php endif; ?>
-                                                </label>
-                                                <input type="file" name="document" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" required>
-                                            </div>
-
-                                            <div class="col-12 col-md-5">
-                                                <label class="form-label small text-secondary mb-1">Version / Revision Notes (Optional)</label>
-                                                <input type="text" name="upload_notes" maxlength="255" class="form-control form-control-sm" placeholder="e.g., Updated quantities or signed client copy">
-                                            </div>
-
-                                            <div class="col-12 col-md-2 d-grid">
-                                                <button type="submit" class="btn btn-primary btn-sm">
-                                                    <?= $currentDoc === null ? 'Save File' : 'Replace File' ?>
-                                                </button>
-                                            </div>
-                                        </form>
-                                    </td>
-                                </tr>
-                            <?php endif; ?>
-
-                            <?php if ($historyCount > 0): ?>
-                                <tr id="<?= e($historyPanelId) ?>" class="checklist-subrow <?= $isRowHistoryOpen ? '' : 'd-none' ?>">
-                                    <td colspan="6" class="px-4 py-3">
-                                        <div class="small fw-semibold text-secondary mb-2">
-                                            Preserved Previous Versions for <?= e((string) $item['code']) ?> (<?= $historyCount ?>)
-                                        </div>
-                                        <div class="table-responsive">
-                                            <table class="table table-sm bg-white mb-0 small">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Ver.</th>
-                                                        <th>Original Filename</th>
-                                                        <th>Size</th>
-                                                        <th>Uploaded By</th>
-                                                        <th>Uploaded At</th>
-                                                        <th>Notes</th>
-                                                        <th class="text-end">Action</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <?php foreach ($historyDocs as $hist): ?>
-                                                        <tr>
-                                                            <td><span class="badge badge-soft-secondary">v<?= (int) $hist['version_number'] ?></span></td>
-                                                            <td>
-                                                                <?php if ($canDownloadRowDoc): ?>
-                                                                    <a href="<?= url('/projects/' . $projectId . '/documents/' . (int) $hist['id'] . '/view') ?>"
-                                                                       target="_blank"
-                                                                       rel="noopener noreferrer"
-                                                                       class="bms-doc-view-trigger text-dark text-decoration-none fw-medium hover-primary d-inline-flex align-items-center gap-1"
-                                                                       title="View v<?= (int) $hist['version_number'] ?>"
-                                                                       data-doc-id="<?= (int) $hist['id'] ?>"
-                                                                       data-doc-type="<?= e($hist['document_type']) ?>"
-                                                                       data-filename="<?= e($hist['original_filename']) ?>"
-                                                                       data-version="v<?= (int) $hist['version_number'] ?>"
-                                                                       data-size="<?= format_bytes((int) $hist['file_size']) ?>"
-                                                                       data-raw-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $hist['id'] . '/raw') ?>"
-                                                                       data-view-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $hist['id'] . '/view') ?>"
-                                                                       data-download-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $hist['id'] . '/download') ?>">
-                                                                        <span><?= e($hist['original_filename']) ?></span>
-                                                                        <span class="text-primary small" style="font-size: 0.7rem;">&nearr;</span>
-                                                                    </a>
-                                                                <?php else: ?>
-                                                                    <?= e($hist['original_filename']) ?>
-                                                                <?php endif; ?>
-                                                            </td>
-                                                            <td class="text-secondary"><?= format_bytes((int) $hist['file_size']) ?></td>
-                                                            <td><?= e($hist['uploader_name']) ?></td>
-                                                            <td class="text-secondary"><?= format_datetime($hist['created_at']) ?></td>
-                                                            <td class="text-secondary"><?= e($hist['upload_notes'] ?: '—') ?></td>
-                                                            <td class="text-end text-nowrap">
-                                                                <?php if ($canDownloadRowDoc): ?>
-                                                                    <a href="<?= url('/projects/' . $projectId . '/documents/' . (int) $hist['id'] . '/view') ?>"
-                                                                       target="_blank"
-                                                                       rel="noopener noreferrer"
-                                                                       class="bms-action-icon bms-action-icon--primary bms-doc-view-trigger"
-                                                                       title="View v<?= (int) $hist['version_number'] ?>"
-                                                                       aria-label="View v<?= (int) $hist['version_number'] ?>"
-                                                                       data-doc-id="<?= (int) $hist['id'] ?>"
-                                                                       data-doc-type="<?= e($hist['document_type']) ?>"
-                                                                       data-filename="<?= e($hist['original_filename']) ?>"
-                                                                       data-version="v<?= (int) $hist['version_number'] ?>"
-                                                                       data-size="<?= format_bytes((int) $hist['file_size']) ?>"
-                                                                       data-raw-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $hist['id'] . '/raw') ?>"
-                                                                       data-view-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $hist['id'] . '/view') ?>"
-                                                                       data-download-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $hist['id'] . '/download') ?>">
-                                                                        <?= bms_icon('eye') ?>
-                                                                    </a>
-                                                                    <a href="<?= url('/projects/' . $projectId . '/documents/' . (int) $hist['id'] . '/download') ?>"
-                                                                       class="bms-action-icon bms-action-icon--secondary"
-                                                                       title="Download v<?= (int) $hist['version_number'] ?>"
-                                                                       aria-label="Download v<?= (int) $hist['version_number'] ?>">
-                                                                        <?= bms_icon('download') ?>
-                                                                    </a>
-                                                                <?php endif; ?>
-                                                            </td>
-                                                        </tr>
-                                                    <?php endforeach; ?>
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    </td>
-                                </tr>
-                            <?php endif; ?>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Optional Supplementary / General Attachments -->
-            <?php if ($supplementaryDocs !== [] || !empty($canUploadDocument)): ?>
-                <div class="p-3 px-4 border-top bg-light">
-                    <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
-                        <div class="small">
-                            <strong>Supplementary Attachments (Optional):</strong>
-                            <span class="text-secondary">Additional supporting files outside the 6 mandatory checklist items.</span>
-                        </div>
-                        <?php if (!empty($canUploadDocument)): ?>
-                            <a
-                                href="<?= url('/projects/' . $projectId . '?upload=' . rawurlencode('General Attachment') . '#checklist') ?>"
-                                class="btn btn-light btn-sm border"
-                                data-toggle-panel="supplementary-upload-panel"
-                                aria-expanded="<?= $resolvedOpenUploadType === 'General Attachment' ? 'true' : 'false' ?>"
-                            >
-                                + Add Supplementary File
-                            </a>
-                        <?php endif; ?>
-                    </div>
-
-                    <?php if (!empty($canUploadDocument)): ?>
-                        <div id="supplementary-upload-panel" class="mt-3 pt-3 border-top <?= $resolvedOpenUploadType === 'General Attachment' ? '' : 'd-none' ?>">
-                            <form method="POST" action="<?= url('/projects/' . $projectId . '/documents') ?>" enctype="multipart/form-data" class="row g-2 align-items-end">
-                                <?= csrf_field() ?>
-                                <input type="hidden" name="document_type" value="General Attachment">
-                                <div class="col-12 col-md-5">
-                                    <label class="form-label small fw-medium mb-1">Supplementary File</label>
-                                    <input type="file" name="document" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx" required>
-                                </div>
-                                <div class="col-12 col-md-5">
-                                    <label class="form-label small text-secondary mb-1">Description / Notes</label>
-                                    <input type="text" name="upload_notes" maxlength="255" class="form-control form-control-sm" placeholder="Optional attachment note">
-                                </div>
-                                <div class="col-12 col-md-2 d-grid">
-                                    <button type="submit" class="btn btn-secondary btn-sm">Attach</button>
-                                </div>
-                            </form>
-                        </div>
-                    <?php endif; ?>
-
-                    <?php if ($supplementaryDocs !== []): ?>
-                        <ul class="list-group list-group-flush mt-2 rounded border">
-                            <?php foreach ($supplementaryDocs as $sDoc): ?>
-                                <li class="list-group-item d-flex flex-wrap justify-content-between align-items-center gap-2 small py-2">
-                                    <div>
-                                        <span class="badge badge-soft-secondary me-1">v<?= (int) $sDoc['version_number'] ?></span>
-                                        <?php if (!empty($canDownloadDocument)): ?>
-                                            <a href="<?= url('/projects/' . $projectId . '/documents/' . (int) $sDoc['id'] . '/view') ?>"
-                                               target="_blank"
-                                               rel="noopener noreferrer"
-                                               class="bms-doc-view-trigger text-dark text-decoration-none fw-bold hover-primary"
-                                               title="View attachment"
-                                               data-doc-id="<?= (int) $sDoc['id'] ?>"
-                                               data-doc-type="<?= e($sDoc['document_type']) ?>"
-                                               data-filename="<?= e($sDoc['original_filename']) ?>"
-                                               data-version="v<?= (int) $sDoc['version_number'] ?>"
-                                               data-size="<?= format_bytes((int) $sDoc['file_size']) ?>"
-                                               data-raw-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $sDoc['id'] . '/raw') ?>"
-                                               data-view-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $sDoc['id'] . '/view') ?>"
-                                               data-download-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $sDoc['id'] . '/download') ?>">
-                                                <?= e($sDoc['original_filename']) ?> &nearr;
-                                            </a>
-                                        <?php else: ?>
-                                            <strong><?= e($sDoc['original_filename']) ?></strong>
-                                        <?php endif; ?>
-                                        <span class="text-secondary ms-1">(<?= format_bytes((int) $sDoc['file_size']) ?> &bull; <?= e($sDoc['uploader_name']) ?>)</span>
-                                    </div>
-                                    <?php if (!empty($canDownloadDocument)): ?>
-                                        <div class="bms-action-group">
-                                            <a href="<?= url('/projects/' . $projectId . '/documents/' . (int) $sDoc['id'] . '/view') ?>"
-                                               target="_blank"
-                                               rel="noopener noreferrer"
-                                               class="bms-action-icon bms-action-icon--primary bms-doc-view-trigger"
-                                               title="View Attachment"
-                                               aria-label="View Attachment"
-                                               data-doc-id="<?= (int) $sDoc['id'] ?>"
-                                               data-doc-type="<?= e($sDoc['document_type']) ?>"
-                                               data-filename="<?= e($sDoc['original_filename']) ?>"
-                                               data-version="v<?= (int) $sDoc['version_number'] ?>"
-                                               data-size="<?= format_bytes((int) $sDoc['file_size']) ?>"
-                                               data-raw-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $sDoc['id'] . '/raw') ?>"
-                                               data-view-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $sDoc['id'] . '/view') ?>"
-                                               data-download-url="<?= url('/projects/' . $projectId . '/documents/' . (int) $sDoc['id'] . '/download') ?>">
-                                                <?= bms_icon('eye') ?>
-                                            </a>
-                                            <a href="<?= url('/projects/' . $projectId . '/documents/' . (int) $sDoc['id'] . '/download') ?>"
-                                               class="bms-action-icon bms-action-icon--secondary"
-                                               title="Download Attachment"
-                                               aria-label="Download Attachment">
-                                                <?= bms_icon('download') ?>
-                                            </a>
-                                        </div>
-                                    <?php endif; ?>
-                                </li>
-                            <?php endforeach; ?>
-                        </ul>
-                    <?php endif; ?>
-                </div>
-            <?php endif; ?>
-        </div>
-    </div>
-</div>
-
 <!-- In-System Interactive Document Viewer Modal -->
 <div class="modal fade" id="bmsDocPreviewModal" tabindex="-1" aria-labelledby="bmsDocPreviewModalTitle" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable" style="max-width: 95vw; height: 92vh;">
@@ -3182,65 +3003,4 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
 <script src="<?= asset('js/vendor/xlsx.full.min.js') ?>"></script>
 <script src="<?= asset('js/vendor/mammoth.browser.min.js') ?>"></script>
 <script src="<?= asset('js/document-viewer.js') ?>"></script>
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    // Dynamic PR row addition
-    var addPrRowBtn = document.getElementById('bmsAddPrRowBtn');
-    if (addPrRowBtn) {
-        addPrRowBtn.addEventListener('click', function () {
-            var tbody = document.getElementById('bmsPrItemsTableBody');
-            if (!tbody) return;
-            var rowCount = tbody.children.length + 1;
-            var tr = document.createElement('tr');
-            tr.innerHTML = '<td class="text-center font-monospace small">' + rowCount + '</td>'
-                + '<td><input type="text" name="item_description[]" class="form-control form-control-sm" placeholder="e.g. Solar Inverter 50kW" required></td>'
-                + '<td><input type="text" name="model_part_number[]" class="form-control form-control-sm font-monospace" placeholder="e.g. SUN2000-50KTL"></td>'
-                + '<td><textarea name="item_specification[]" rows="2" class="form-control form-control-sm" placeholder="Detailed technical specs..." required></textarea></td>'
-                + '<td><input type="number" step="0.01" min="0.01" name="quantity[]" class="form-control form-control-sm" value="1.00" required></td>'
-                + '<td><input type="text" name="unit_of_measure[]" class="form-control form-control-sm" value="pcs" required></td>'
-                + '<td><input type="text" name="item_purpose[]" class="form-control form-control-sm" placeholder="Item purpose"></td>'
-                + '<td><input type="text" name="item_remarks[]" class="form-control form-control-sm" placeholder="Optional note"></td>'
-                + '<td class="text-center"><button type="button" class="btn btn-outline-danger btn-sm p-1 bms-remove-row" title="Remove line item">&times;</button></td>';
-            tbody.appendChild(tr);
-        });
-    }
-
-    // Dynamic Actual BOM row addition
-    var addAbRowBtn = document.getElementById('bmsAddAbRowBtn');
-    if (addAbRowBtn) {
-        addAbRowBtn.addEventListener('click', function () {
-            var tbody = document.getElementById('bmsAbItemsTableBody');
-            if (!tbody) return;
-            var rowCount = tbody.children.length + 1;
-            var tr = document.createElement('tr');
-            tr.innerHTML = '<td class="text-center font-monospace small">' + rowCount + '</td>'
-                + '<td><input type="text" name="ab_item_description[]" class="form-control form-control-sm" placeholder="Item description" required><input type="hidden" name="ab_pr_item_id[]" value=""></td>'
-                + '<td><textarea name="ab_actual_specification[]" rows="2" class="form-control form-control-sm" placeholder="Actual equipment/material specifications..." required></textarea></td>'
-                + '<td><input type="number" step="0.01" min="0.01" name="ab_quantity[]" class="form-control form-control-sm" value="1.00" required></td>'
-                + '<td><input type="text" name="ab_unit_of_measure[]" class="form-control form-control-sm" value="pcs" required></td>'
-                + '<td><input type="text" name="ab_item_remarks[]" class="form-control form-control-sm" placeholder="Optional note"></td>'
-                + '<td class="text-center"><button type="button" class="btn btn-outline-danger btn-sm p-1 bms-remove-row" title="Remove line item">&times;</button></td>';
-            tbody.appendChild(tr);
-        });
-    }
-
-    // Remove row delegation for both PR and Actual BOM tables
-    document.addEventListener('click', function (e) {
-        if (e.target && e.target.classList.contains('bms-remove-row')) {
-            var tr = e.target.closest('tr');
-            var tbody = tr ? tr.parentNode : null;
-            if (tbody) {
-                if (tbody.children.length > 1) {
-                    tr.remove();
-                    Array.from(tbody.children).forEach(function (row, idx) {
-                        var firstCol = row.querySelector('td:first-child');
-                        if (firstCol) firstCol.textContent = idx + 1;
-                    });
-                } else {
-                    alert('At least one item is required.');
-                }
-            }
-        }
-    });
-});
-</script>
+<script src="<?= asset('js/project-line-items.js') ?>"></script>

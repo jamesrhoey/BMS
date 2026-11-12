@@ -8,7 +8,7 @@ $userInitial = strtoupper((string) substr($userFullName !== '' ? $userFullName :
             <div class="bms-brand-logo-plate">
                 <img src="<?= asset('images/pagecom-logo.png') ?>" alt="PAGECOM INC." class="bms-brand-logo">
             </div>
-            <div class="bms-sidebar-brand-name">PAGECOM INC.</div>
+            
             <div class="bms-sidebar-brand-subtitle">Business Management System</div>
         </a>
 

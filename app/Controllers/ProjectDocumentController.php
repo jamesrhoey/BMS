@@ -221,11 +221,11 @@ final class ProjectDocumentController extends Controller
         $mime = (string) $document['mime_type'];
 
         $fileCategory = match (true) {
-            in_array($ext, ['xlsx', 'xls', 'csv'], true) || str_contains($mime, 'spreadsheet') || str_contains($mime, 'excel') => 'excel',
+            in_array($ext, ['xlsx', 'xls', 'csv'], true) || str_contains($mime, 'spreadsheet') || str_contains($mime, 'excel') || str_contains($mime, 'csv') => 'excel',
             $ext === 'pdf' || $mime === 'application/pdf' => 'pdf',
             in_array($ext, ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'], true) || str_starts_with($mime, 'image/') => 'image',
             in_array($ext, ['docx', 'doc'], true) || str_contains($mime, 'word') => 'word',
-            in_array($ext, ['txt', 'json', 'log'], true) || str_starts_with($mime, 'text/') => 'text',
+            in_array($ext, ['txt', 'json', 'log'], true) || ($ext !== 'csv' && str_starts_with($mime, 'text/')) => 'text',
             default => 'other',
         };
 

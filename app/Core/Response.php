@@ -66,7 +66,7 @@ final class Response
             "script-src 'self' https://cdn.jsdelivr.net; " .
             "font-src 'self' https://cdn.jsdelivr.net data:; " .
             "img-src 'self' data: blob:; " .
-            "connect-src 'self'; " .
+            "connect-src 'self' https://cdn.jsdelivr.net; " .
             "object-src 'self' blob:; " .
             "frame-src 'self' blob:; " .
             "frame-ancestors 'self'; " .

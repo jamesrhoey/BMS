@@ -73,39 +73,49 @@
 
             <?php elseif ($fileCategory === 'excel'): ?>
                 <!-- Interactive SheetJS Excel Spreadsheet Viewer -->
-                <div id="excel-viewer-container">
-                    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 p-2 bg-light rounded border mb-2">
-                        <div class="d-flex align-items-center gap-2 flex-wrap">
-                            <span class="small fw-bold text-secondary text-uppercase tracking-wider">Sheets:</span>
-                            <div id="excel-sheet-tabs" class="btn-group btn-group-sm flex-wrap" role="group" aria-label="Worksheets"></div>
+                <div id="excel-viewer-container" class="bms-excel-frame">
+                    <div class="bms-excel-titlebar">
+                        <div class="bms-excel-brand">
+                            <?= bms_icon('excel', 16) ?>
+                            <span>Microsoft Excel / CSV Workbook Viewer</span>
+                        </div>
+                        <span class="bms-excel-badge" id="excel-sheet-active-badge">Sheet1</span>
+                    </div>
+
+                    <div class="bms-excel-toolbar">
+                        <div class="bms-excel-formulabar-wrap">
+                            <span class="bms-excel-name-box" id="excel-cell-name">A1</span>
+                            <span class="bms-excel-fx-label">fx</span>
+                            <input type="text" id="excel-formula-val" class="bms-excel-formula-input" readonly placeholder="Select a cell to view contents...">
                         </div>
                         <div class="d-flex align-items-center gap-2">
                             <input type="text"
                                    id="excel-search-input"
                                    class="form-control form-control-sm"
-                                   placeholder="Search sheet data..."
-                                   style="max-width: 260px;"
+                                   placeholder="Filter cells..."
+                                   style="max-width: 220px;"
                                    aria-label="Filter sheet table rows">
                             <span id="excel-row-count" class="badge badge-soft-secondary small"></span>
                         </div>
                     </div>
 
                     <div id="excel-loading-spinner" class="text-center py-5">
-                        <div class="spinner-border text-primary" role="status">
+                        <div class="spinner-border text-success" role="status">
                             <span class="visually-hidden">Loading spreadsheet...</span>
                         </div>
                         <div class="mt-2 text-secondary fw-medium">Loading and rendering spreadsheet data...</div>
                     </div>
 
-                    <div id="excel-error-message" class="alert alert-warning d-none" role="alert">
+                    <div id="excel-error-message" class="alert alert-warning m-3 d-none" role="alert">
                         <strong>Preview Note:</strong> Unable to render spreadsheet preview.
                         <a href="<?= e($downloadUrl) ?>" class="alert-link">Click here to download and view in Microsoft Excel or your spreadsheet app</a>.
                     </div>
 
-                    <div id="excel-table-scroll" class="table-responsive bg-white border rounded shadow-sm d-none"
-                         style="max-height: calc(100vh - 250px); min-height: 480px; overflow: auto;">
-                        <table id="excel-render-table" class="table table-sm table-bordered table-hover table-striped align-middle mb-0"></table>
+                    <div id="excel-table-scroll" class="bms-excel-grid-scroll d-none">
+                        <table id="excel-render-table" class="bms-excel-grid-table"></table>
                     </div>
+
+                    <div class="bms-excel-tabs-bar" id="excel-sheet-tabs"></div>
                 </div>
 
             <?php elseif ($fileCategory === 'image'): ?>
@@ -141,7 +151,7 @@
                 </div>
 
             <?php elseif ($fileCategory === 'text'): ?>
-                <!-- Plain Text / CSV / Log Viewer -->
+                <!-- Plain Text / Log Viewer -->
                 <div style="height: calc(100vh - 200px); min-height: 500px;">
                     <iframe src="<?= e($rawUrl) ?>"
                             class="w-100 h-100 border rounded bg-white"
@@ -153,7 +163,7 @@
                 <!-- Fallback Info Card for Unsupported Binary Formats -->
                 <div class="text-center py-5">
                     <div class="mb-3 text-secondary">
-                        <?= bms_icon('document', 'w-16 h-16') ?>
+                        <?= bms_icon('document', 48) ?>
                     </div>
                     <h5 class="fw-bold text-dark">File Preview Not Available for this Format</h5>
                     <p class="text-secondary small mb-3">
@@ -171,9 +181,9 @@
 </div>
 
 <?php if ($fileCategory === 'excel'): ?>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="<?= asset('js/vendor/xlsx.full.min.js') ?>"></script>
 <?php elseif ($fileCategory === 'word'): ?>
-    <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
+    <script src="<?= asset('js/vendor/mammoth.browser.min.js') ?>"></script>
 <?php endif; ?>
 <script src="<?= asset('js/document-viewer.js') ?>"></script>
 
