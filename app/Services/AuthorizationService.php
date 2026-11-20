@@ -981,4 +981,149 @@ final class AuthorizationService
             SupplierDelivery::STATUS_DISCREPANCY,
         ], true);
     }
+
+    // -------------------------------------------------------------------------
+    // IATMS INTEGRATED INVENTORY, DELIVERY, BILLING, WARRANTY & REPORTING GATES
+    // -------------------------------------------------------------------------
+
+    /**
+     * View IATMS inventory modules (Catalog, Stock In, Stock Out, Ending Balance, Units, Warranties, Reports).
+     * Allowed: Administrator, Logistics (LOG), Operations (OPS), Admin Finance (ADMFIN), Operation Finance (OPFIN).
+     * Blocked: Marketing (MKT), Project Management (PM).
+     *
+     * @param array<string, mixed>|null $user
+     */
+    public static function canAccessIatms(?array $user): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+        if (self::isAdmin($user)) {
+            return true;
+        }
+        return self::isLogisticsUser($user)
+            || self::isOperationsUser($user)
+            || self::isAdminFinanceUser($user)
+            || self::isOpsFinanceUser($user);
+    }
+
+    /**
+     * Manage Product Catalog (create/edit items). Allowed: Admin, LOG, ADMFIN.
+     *
+     * @param array<string, mixed>|null $user
+     */
+    public static function canManageIatmsCatalog(?array $user): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+        return self::isAdmin($user) || self::isLogisticsUser($user) || self::isAdminFinanceUser($user);
+    }
+
+    /**
+     * Record Dual-Mode Stock In (Form 1). Allowed: Admin, LOG, OPS.
+     *
+     * @param array<string, mixed>|null $user
+     */
+    public static function canRecordIatmsStockIn(?array $user): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+        return self::isAdmin($user) || self::isLogisticsUser($user) || self::isOperationsUser($user);
+    }
+
+    /**
+     * Execute Stock Out & Customer Deliveries (Form 2). Allowed: Admin, LOG.
+     *
+     * @param array<string, mixed>|null $user
+     */
+    public static function canRecordIatmsStockOut(?array $user): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+        return self::isAdmin($user) || self::isLogisticsUser($user);
+    }
+
+    /**
+     * Update delivery trajectory or cancel/reverse dispatches. Allowed: Admin, LOG, ADMFIN.
+     *
+     * @param array<string, mixed>|null $user
+     */
+    public static function canManageIatmsDeliveries(?array $user): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+        return self::isAdmin($user) || self::isLogisticsUser($user) || self::isAdminFinanceUser($user);
+    }
+
+    /**
+     * Edit Ending Balance (Form 3) remarks & execute authorized stock adjustments. Allowed: Admin, LOG, ADMFIN.
+     *
+     * @param array<string, mixed>|null $user
+     */
+    public static function canManageIatmsEndingBalance(?array $user): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+        return self::isAdmin($user) || self::isLogisticsUser($user) || self::isAdminFinanceUser($user);
+    }
+
+    /**
+     * Transition serialized units to/from maintenance (`under_repair`) or `scrapped`. Allowed: Admin, LOG.
+     *
+     * @param array<string, mixed>|null $user
+     */
+    public static function canManageIatmsUnitMaintenance(?array $user): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+        return self::isAdmin($user) || self::isLogisticsUser($user);
+    }
+
+    /**
+     * View Invoices & Collections. Allowed: Admin, ADMFIN, OPFIN, LOG.
+     *
+     * @param array<string, mixed>|null $user
+     */
+    public static function canViewIatmsFinance(?array $user): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+        return self::isAdmin($user)
+            || self::isAdminFinanceUser($user)
+            || self::isOpsFinanceUser($user)
+            || self::isLogisticsUser($user);
+    }
+
+    /**
+     * Create/Cancel Invoices & Record/Void Collections. Allowed: Admin, ADMFIN.
+     *
+     * @param array<string, mixed>|null $user
+     */
+    public static function canManageIatmsFinance(?array $user): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+        return self::isAdmin($user) || self::isAdminFinanceUser($user);
+    }
+
+    /**
+     * Adjust Warranties & Manage RMA Claims. Allowed: Admin, LOG, ADMFIN.
+     *
+     * @param array<string, mixed>|null $user
+     */
+    public static function canManageIatmsWarranties(?array $user): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+        return self::isAdmin($user) || self::isLogisticsUser($user) || self::isAdminFinanceUser($user);
+    }
 }

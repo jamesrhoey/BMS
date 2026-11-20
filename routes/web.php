@@ -7,14 +7,21 @@ use App\Controllers\AdminFinanceController;
 use App\Controllers\AuthController;
 use App\Controllers\DashboardController;
 use App\Controllers\DepartmentController;
+use App\Controllers\EndingBalanceController;
+use App\Controllers\FinanceBillingController;
+use App\Controllers\InventoryUnitController;
 use App\Controllers\MarketingController;
 use App\Controllers\NotificationController;
 use App\Controllers\OperationsController;
 use App\Controllers\OpsFinanceController;
+use App\Controllers\ProductCatalogController;
 use App\Controllers\ProfileController;
 use App\Controllers\ProjectController;
 use App\Controllers\ProjectDocumentController;
 use App\Controllers\ProjectManagementController;
+use App\Controllers\ReportController;
+use App\Controllers\StockInController;
+use App\Controllers\StockOutController;
 use App\Controllers\UserController;
 use App\Core\Router;
 use App\Middleware\AuthMiddleware;
@@ -130,3 +137,63 @@ $router->post('/projects/{id}/documents', [ProjectDocumentController::class, 'up
 $router->get('/projects/{id}/documents/{docId}/view', [ProjectDocumentController::class, 'view'], [AuthMiddleware::class]);
 $router->get('/projects/{id}/documents/{docId}/raw', [ProjectDocumentController::class, 'raw'], [AuthMiddleware::class]);
 $router->get('/projects/{id}/documents/{docId}/download', [ProjectDocumentController::class, 'download'], [AuthMiddleware::class]);
+
+// =============================================================================
+// IATMS INTEGRATED INVENTORY, DIGITIZED FORMS, BILLING & WARRANTY ROUTES
+// =============================================================================
+
+// Product Catalog
+$router->get('/inventory/products', [ProductCatalogController::class, 'index'], [AuthMiddleware::class]);
+$router->get('/inventory/products/create', [ProductCatalogController::class, 'create'], [AuthMiddleware::class]);
+$router->post('/inventory/products', [ProductCatalogController::class, 'store'], [AuthMiddleware::class]);
+$router->get('/inventory/products/{id}/edit', [ProductCatalogController::class, 'edit'], [AuthMiddleware::class]);
+$router->post('/inventory/products/{id}', [ProductCatalogController::class, 'update'], [AuthMiddleware::class]);
+
+// Stock In / Equipment Receiving (Digitized Paper Form 1)
+$router->get('/inventory/stock-in', [StockInController::class, 'index'], [AuthMiddleware::class]);
+$router->get('/inventory/stock-in/create', [StockInController::class, 'create'], [AuthMiddleware::class]);
+$router->post('/inventory/stock-in', [StockInController::class, 'store'], [AuthMiddleware::class]);
+$router->get('/inventory/stock-in/po-items/{id}', [StockInController::class, 'getPoItems'], [AuthMiddleware::class]);
+$router->get('/inventory/stock-in/{id}', [StockInController::class, 'show'], [AuthMiddleware::class]);
+
+// Stock Out & Customer Deliveries (Digitized Paper Form 2)
+$router->get('/inventory/stock-out', [StockOutController::class, 'index'], [AuthMiddleware::class]);
+$router->get('/inventory/stock-out/create', [StockOutController::class, 'create'], [AuthMiddleware::class]);
+$router->post('/inventory/stock-out', [StockOutController::class, 'store'], [AuthMiddleware::class]);
+$router->get('/inventory/stock-out/{id}', [StockOutController::class, 'show'], [AuthMiddleware::class]);
+$router->post('/inventory/stock-out/{id}/status', [StockOutController::class, 'updateStatus'], [AuthMiddleware::class]);
+$router->post('/inventory/stock-out/{id}/cancel', [StockOutController::class, 'cancel'], [AuthMiddleware::class]);
+
+// Ending Balance & Reconciliation (Digitized Paper Form 3)
+$router->get('/inventory/ending-balance', [EndingBalanceController::class, 'index'], [AuthMiddleware::class]);
+$router->post('/inventory/ending-balance/remarks', [EndingBalanceController::class, 'updateRemarks'], [AuthMiddleware::class]);
+$router->post('/inventory/ending-balance/adjust', [EndingBalanceController::class, 'adjust'], [AuthMiddleware::class]);
+
+// Serialized Hardware Units, Maintenance & Dossier
+$router->get('/inventory/units', [InventoryUnitController::class, 'index'], [AuthMiddleware::class]);
+$router->get('/inventory/units/{id}', [InventoryUnitController::class, 'show'], [AuthMiddleware::class]);
+$router->post('/inventory/units/{id}/maintenance', [InventoryUnitController::class, 'transitionMaintenance'], [AuthMiddleware::class]);
+
+// Invoices & Payment Collections
+$router->get('/invoices', [FinanceBillingController::class, 'invoicesIndex'], [AuthMiddleware::class]);
+$router->get('/invoices/create', [FinanceBillingController::class, 'invoiceCreate'], [AuthMiddleware::class]);
+$router->post('/invoices', [FinanceBillingController::class, 'invoiceStore'], [AuthMiddleware::class]);
+$router->get('/invoices/{id}', [FinanceBillingController::class, 'invoiceShow'], [AuthMiddleware::class]);
+$router->post('/invoices/{id}/cancel', [FinanceBillingController::class, 'invoiceCancel'], [AuthMiddleware::class]);
+
+$router->get('/collections', [FinanceBillingController::class, 'collectionsIndex'], [AuthMiddleware::class]);
+$router->post('/collections', [FinanceBillingController::class, 'collectionStore'], [AuthMiddleware::class]);
+$router->post('/collections/{id}/void', [FinanceBillingController::class, 'collectionVoid'], [AuthMiddleware::class]);
+
+// Warranties & Claims
+$router->get('/warranties', [FinanceBillingController::class, 'warrantiesIndex'], [AuthMiddleware::class]);
+$router->get('/warranties/{id}', [FinanceBillingController::class, 'warrantyShow'], [AuthMiddleware::class]);
+$router->post('/warranties/{id}/adjust', [FinanceBillingController::class, 'warrantyAdjust'], [AuthMiddleware::class]);
+$router->post('/warranties/{id}/claims', [FinanceBillingController::class, 'warrantyClaimStore'], [AuthMiddleware::class]);
+
+// Digitized Paper-Form Reports, Exports & Landscape Print Previews
+$router->get('/reports', [ReportController::class, 'index'], [AuthMiddleware::class]);
+$router->get('/reports/{slug}/export-csv', [ReportController::class, 'exportCsv'], [AuthMiddleware::class]);
+$router->get('/reports/{slug}/export-excel', [ReportController::class, 'exportExcel'], [AuthMiddleware::class]);
+$router->get('/reports/{slug}/print', [ReportController::class, 'printPreview'], [AuthMiddleware::class]);
+$router->get('/reports/{slug}', [ReportController::class, 'show'], [AuthMiddleware::class]);

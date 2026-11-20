@@ -635,4 +635,108 @@ class PurchaseOrder
             'notes' => $notes,
         ]);
     }
+
+    /**
+     * Fetch open/approved Purchase Orders eligible for Mode B Stock In receiving.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function getOpenOrdersForReceiving(): array
+    {
+        $sql = "SELECT po.id, po.po_number, po.po_date, po.supplier_id, po.status, po.total_amount,
+                       s.supplier_name,
+                       (SELECT SUM(poi.quantity_ordered - poi.quantity_received)
+                        FROM purchase_order_items poi
+                        WHERE poi.purchase_order_id = po.id) AS total_outstanding
+                FROM purchase_orders po
+                INNER JOIN suppliers s ON s.id = po.supplier_id
+                WHERE po.status IN ('Approved', 'Issued to Supplier', 'Partially Received')
+                HAVING total_outstanding > 0
+                ORDER BY po.po_date DESC, po.id DESC";
+        return Database::connection()->query($sql)->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Fetch PO line items with remaining receivable quantities for Mode B Stock In.
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function getReceivableItems(int $poId): array
+    {
+        $stmt = Database::connection()->prepare(
+            'SELECT poi.*,
+                    (poi.quantity_ordered - poi.quantity_received) AS outstanding_quantity,
+                    ii.id AS matched_item_id,
+                    ii.item_code,
+                    ii.item_name,
+                    ii.is_serialized,
+                    ii.default_warranty_months
+             FROM purchase_order_items poi
+             LEFT JOIN inventory_items ii ON ii.id = poi.inventory_item_id
+             WHERE poi.purchase_order_id = :po_id
+               AND (poi.quantity_ordered - poi.quantity_received) > 0
+             ORDER BY poi.line_no ASC, poi.id ASC'
+        );
+        $stmt->execute(['po_id' => $poId]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    /**
+     * Cancel a Purchase Order and atomically release all un-received quantities back to linked PR items.
+     */
+    public static function cancelAndReleasePrQuantities(int $poId, string $reason, int $actorId): void
+    {
+        $reason = trim($reason);
+        if ($reason === '') {
+            throw new \InvalidArgumentException('A cancellation reason is required.');
+        }
+
+        Database::transaction(static function (PDO $pdo) use ($poId, $reason, $actorId): void {
+            $stmt = $pdo->prepare('SELECT * FROM purchase_orders WHERE id = :id FOR UPDATE');
+            $stmt->execute(['id' => $poId]);
+            $po = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$po) {
+                throw new \InvalidArgumentException("Purchase Order #{$poId} not found.");
+            }
+            if ((string) $po['status'] === self::STATUS_CANCELLED) {
+                throw new \RuntimeException("Purchase Order {$po['po_number']} is already cancelled.");
+            }
+
+            $prevStatus = (string) $po['status'];
+            $itemsStmt = $pdo->prepare('SELECT * FROM purchase_order_items WHERE purchase_order_id = :po_id FOR UPDATE');
+            $itemsStmt->execute(['po_id' => $poId]);
+            $items = $itemsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            foreach ($items as $it) {
+                $unreceived = max(0.0, (float) $it['quantity_ordered'] - (float) $it['quantity_received']);
+                if ($unreceived > 0.0 && !empty($it['pr_item_id'])) {
+                    $pdo->prepare(
+                        'UPDATE purchase_request_items
+                         SET ordered_quantity = GREATEST(0.00, ordered_quantity - :qty)
+                         WHERE id = :pr_item_id'
+                    )->execute([
+                        'qty' => $unreceived,
+                        'pr_item_id' => (int) $it['pr_item_id'],
+                    ]);
+                }
+            }
+
+            $pdo->prepare('UPDATE purchase_orders SET status = :st, updated_at = NOW() WHERE id = :id')
+                ->execute(['st' => self::STATUS_CANCELLED, 'id' => $poId]);
+
+            self::recordHistory($poId, $prevStatus, self::STATUS_CANCELLED, 'cancelled', $actorId, $reason);
+
+            \App\Services\ActivityLogger::log(
+                'PO_CANCELLED',
+                'purchase_order',
+                $poId,
+                "Cancelled PO {$po['po_number']} and released un-received quantities back to PR: {$reason}",
+                null,
+                $actorId,
+                false,
+                ['status' => $prevStatus],
+                ['status' => self::STATUS_CANCELLED, 'reason' => $reason]
+            );
+        });
+    }
 }

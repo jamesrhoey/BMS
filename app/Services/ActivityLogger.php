@@ -9,6 +9,10 @@ use App\Models\ActivityLog;
 
 final class ActivityLogger
 {
+    /**
+     * @param array<string, mixed>|null $oldValues
+     * @param array<string, mixed>|null $newValues
+     */
     public static function log(
         string $action,
         string $entityType,
@@ -16,7 +20,9 @@ final class ActivityLogger
         string $description,
         ?Request $request = null,
         ?int $explicitUserId = null,
-        bool $useCurrentAuthUser = true
+        bool $useCurrentAuthUser = true,
+        ?array $oldValues = null,
+        ?array $newValues = null
     ): void {
         $userId = $explicitUserId;
         if ($userId === null && $useCurrentAuthUser) {
@@ -24,7 +30,8 @@ final class ActivityLogger
             $userId = $currentUser !== null ? (int) $currentUser['id'] : null;
         }
 
-        $ip = $request?->ip();
+        $ip = $request?->ip() ?? ($_SERVER['REMOTE_ADDR'] ?? null);
+        $userAgent = $_SERVER['HTTP_USER_AGENT'] ?? null;
 
         ActivityLog::record(
             $userId,
@@ -32,7 +39,10 @@ final class ActivityLogger
             $entityType,
             $entityId,
             $description,
-            $ip
+            $ip,
+            $oldValues,
+            $newValues,
+            $userAgent
         );
     }
 }

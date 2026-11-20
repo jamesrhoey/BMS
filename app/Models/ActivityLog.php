@@ -13,17 +13,27 @@ use PDO;
  */
 final class ActivityLog
 {
+    /**
+     * @param array<string, mixed>|null $oldValues
+     * @param array<string, mixed>|null $newValues
+     */
     public static function record(
         ?int $userId,
         string $action,
         string $entityType,
         ?int $entityId,
         string $description,
-        ?string $ipAddress
+        ?string $ipAddress,
+        ?array $oldValues = null,
+        ?array $newValues = null,
+        ?string $userAgent = null
     ): void {
+        $oldJson = $oldValues !== null ? json_encode(self::sanitizePayload($oldValues), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
+        $newJson = $newValues !== null ? json_encode(self::sanitizePayload($newValues), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
+
         $stmt = Database::connection()->prepare(
-            'INSERT INTO activity_logs (user_id, action, entity_type, entity_id, description, ip_address)
-             VALUES (:user_id, :action, :entity_type, :entity_id, :description, :ip_address)'
+            'INSERT INTO activity_logs (user_id, action, entity_type, entity_id, description, old_values, new_values, ip_address, user_agent)
+             VALUES (:user_id, :action, :entity_type, :entity_id, :description, :old_values, :new_values, :ip_address, :user_agent)'
         );
         $stmt->execute([
             'user_id' => $userId,
@@ -31,8 +41,33 @@ final class ActivityLog
             'entity_type' => $entityType,
             'entity_id' => $entityId,
             'description' => $description,
+            'old_values' => $oldJson !== false ? $oldJson : null,
+            'new_values' => $newJson !== false ? $newJson : null,
             'ip_address' => $ipAddress,
+            'user_agent' => $userAgent !== null ? substr($userAgent, 0, 255) : null,
         ]);
+    }
+
+    /**
+     * Strip sensitive credential fields before persisting audit JSON.
+     *
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>
+     */
+    private static function sanitizePayload(array $payload): array
+    {
+        $sensitive = ['password', 'password_hash', 'csrf_token', '_token', 'secret'];
+        $clean = [];
+        foreach ($payload as $k => $v) {
+            if (is_string($k) && in_array(strtolower($k), $sensitive, true)) {
+                $clean[$k] = '[REDACTED]';
+            } elseif (is_array($v)) {
+                $clean[$k] = self::sanitizePayload($v);
+            } else {
+                $clean[$k] = $v;
+            }
+        }
+        return $clean;
     }
 
     /**

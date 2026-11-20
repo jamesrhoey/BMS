@@ -1068,6 +1068,114 @@ $userInitial = strtoupper((string) substr($userFullName !== '' ? $userFullName :
             </a>
         <?php endif; ?>
 
+        <?php if (!empty($canAccessIatms)): ?>
+            <?php
+            $iatmsNav = (string) ($activeNav ?? '');
+            $isIatmsFormsOpen = in_array($iatmsNav, ['iatms_stock_in', 'iatms_stock_in_create', 'iatms_stock_out', 'iatms_stock_out_create', 'iatms_ending_balance'], true);
+            $isIatmsWhOpen = in_array($iatmsNav, ['iatms_products', 'iatms_units', 'iatms_warranties'], true);
+            $isIatmsFinOpen = in_array($iatmsNav, ['iatms_invoices', 'iatms_collections'], true);
+            ?>
+            <div class="bms-sidebar-section"><span>Inventory &amp; Assets</span></div>
+
+            <!-- DIGITIZED PAPER FORMS (Dropdown) -->
+            <div class="bms-nav-group <?= $isIatmsFormsOpen ? 'open' : '' ?>" data-nav-group="iatms-forms">
+                <button type="button"
+                        class="bms-nav-dropdown-toggle <?= $isIatmsFormsOpen ? 'active-parent' : '' ?>"
+                        data-nav-toggle="iatms-forms"
+                        aria-expanded="<?= $isIatmsFormsOpen ? 'true' : 'false' ?>"
+                        aria-controls="nav-group-iatms-forms"
+                        title="Digitized Paper Forms">
+                    <span class="bms-nav-icon" aria-hidden="true"><?= bms_icon('file-text', 18) ?></span>
+                    <span class="bms-nav-label">Digitized Forms</span>
+                    <span class="bms-nav-chevron" aria-hidden="true"><?= bms_icon('chevron-down', 14) ?></span>
+                </button>
+                <div class="bms-subnav-menu" id="nav-group-iatms-forms" role="region" aria-label="Digitized Forms Submenu">
+                    <a href="<?= url('/inventory/stock-in') ?>" class="bms-subnav-link <?= in_array($iatmsNav, ['iatms_stock_in', 'iatms_stock_in_create'], true) ? 'active' : '' ?>" title="Stock In (Form 1)">
+                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
+                        <span class="bms-nav-label">Stock In (Form 1)</span>
+                    </a>
+                    <a href="<?= url('/inventory/stock-out') ?>" class="bms-subnav-link <?= in_array($iatmsNav, ['iatms_stock_out', 'iatms_stock_out_create'], true) ? 'active' : '' ?>" title="Stock Out (Form 2)">
+                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
+                        <span class="bms-nav-label">Stock Out (Form 2)</span>
+                    </a>
+                    <a href="<?= url('/inventory/ending-balance') ?>" class="bms-subnav-link <?= $iatmsNav === 'iatms_ending_balance' ? 'active' : '' ?>" title="Ending Balance (Form 3)">
+                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
+                        <span class="bms-nav-label">Ending Balance (Form 3)</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- WAREHOUSE & SERIALS (Dropdown) -->
+            <div class="bms-nav-group <?= $isIatmsWhOpen ? 'open' : '' ?>" data-nav-group="iatms-warehouse">
+                <button type="button"
+                        class="bms-nav-dropdown-toggle <?= $isIatmsWhOpen ? 'active-parent' : '' ?>"
+                        data-nav-toggle="iatms-warehouse"
+                        aria-expanded="<?= $isIatmsWhOpen ? 'true' : 'false' ?>"
+                        aria-controls="nav-group-iatms-warehouse"
+                        title="Warehouse & Serials">
+                    <span class="bms-nav-icon" aria-hidden="true"><?= bms_icon('layers', 18) ?></span>
+                    <span class="bms-nav-label">Warehouse &amp; Serials</span>
+                    <span class="bms-nav-chevron" aria-hidden="true"><?= bms_icon('chevron-down', 14) ?></span>
+                </button>
+                <div class="bms-subnav-menu" id="nav-group-iatms-warehouse" role="region" aria-label="Warehouse Submenu">
+                    <a href="<?= url('/inventory/products') ?>" class="bms-subnav-link <?= $iatmsNav === 'iatms_products' ? 'active' : '' ?>" title="Product Catalog">
+                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
+                        <span class="bms-nav-label">Product Catalog</span>
+                    </a>
+                    <a href="<?= url('/inventory/units') ?>" class="bms-subnav-link <?= $iatmsNav === 'iatms_units' ? 'active' : '' ?>" title="Serialized Units">
+                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
+                        <span class="bms-nav-label">Serialized Units</span>
+                    </a>
+                    <a href="<?= url('/warranties') ?>" class="bms-subnav-link <?= $iatmsNav === 'iatms_warranties' ? 'active' : '' ?>" title="Warranties">
+                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
+                        <span class="bms-nav-label">Warranty Tracking</span>
+                    </a>
+                </div>
+            </div>
+
+            <?php if (!empty($canViewIatmsFinance)): ?>
+                <!-- BILLING & COLLECTIONS (Dropdown) -->
+                <div class="bms-nav-group <?= $isIatmsFinOpen ? 'open' : '' ?>" data-nav-group="iatms-billing">
+                    <button type="button"
+                            class="bms-nav-dropdown-toggle <?= $isIatmsFinOpen ? 'active-parent' : '' ?>"
+                            data-nav-toggle="iatms-billing"
+                            aria-expanded="<?= $isIatmsFinOpen ? 'true' : 'false' ?>"
+                            aria-controls="nav-group-iatms-billing"
+                            title="Billing & Collections">
+                        <span class="bms-nav-icon" aria-hidden="true"><?= bms_icon('briefcase', 18) ?></span>
+                        <span class="bms-nav-label">Billing &amp; Collections</span>
+                        <span class="bms-nav-chevron" aria-hidden="true"><?= bms_icon('chevron-down', 14) ?></span>
+                    </button>
+                    <div class="bms-subnav-menu" id="nav-group-iatms-billing" role="region" aria-label="Billing Submenu">
+                        <a href="<?= url('/invoices') ?>" class="bms-subnav-link <?= $iatmsNav === 'iatms_invoices' ? 'active' : '' ?>" title="Invoices">
+                            <span class="bms-subnav-bullet" aria-hidden="true"></span>
+                            <span class="bms-nav-label">Invoices</span>
+                        </a>
+                        <a href="<?= url('/collections') ?>" class="bms-subnav-link <?= $iatmsNav === 'iatms_collections' ? 'active' : '' ?>" title="Collections">
+                            <span class="bms-subnav-bullet" aria-hidden="true"></span>
+                            <span class="bms-nav-label">Collections</span>
+                        </a>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <a href="<?= url('/reports') ?>"
+               class="bms-nav-link <?= $iatmsNav === 'iatms_reports' ? 'active' : '' ?>"
+               title="Reports & Digitized Form Exports">
+                <span class="bms-nav-icon" aria-hidden="true"><?= bms_icon('activity', 18) ?></span>
+                <span class="bms-nav-label">Reports &amp; Forms</span>
+            </a>
+
+            <?php if (!empty($isAdmin)): ?>
+                <a href="<?= url('/admin/data-integrity') ?>"
+                   class="bms-nav-link <?= $iatmsNav === 'iatms_integrity' ? 'active' : '' ?>"
+                   title="11-Rule Data Integrity Diagnostics">
+                    <span class="bms-nav-icon" aria-hidden="true"><?= bms_icon('file-check', 18) ?></span>
+                    <span class="bms-nav-label">Data Integrity</span>
+                </a>
+            <?php endif; ?>
+        <?php endif; ?>
+
         <div class="bms-sidebar-section"><span>Account</span></div>
         <a href="<?= url('/notifications') ?>"
            class="bms-nav-link justify-content-between position-relative <?= ($activeNav ?? '') === 'notifications' ? 'active' : '' ?>"
