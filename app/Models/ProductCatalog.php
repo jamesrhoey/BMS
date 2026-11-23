@@ -136,19 +136,20 @@ final class ProductCatalog
      */
     public static function create(array $data): int
     {
-        $sku = trim((string) ($data['sku'] ?? $data['item_code'] ?? ''));
-        $name = trim((string) ($data['item_name'] ?? $data['name'] ?? ''));
-        $modelCode = trim((string) ($data['model_part_number'] ?? $data['model_code'] ?? $sku));
+        $modelCode = trim((string) ($data['model_code'] ?? $data['model_part_number'] ?? $data['sku'] ?? $data['item_code'] ?? ''));
+        $description = trim((string) ($data['description'] ?? $data['item_name'] ?? $data['name'] ?? ''));
+        $sku = trim((string) ($data['sku'] ?? $data['item_code'] ?? $modelCode));
+        $name = trim((string) ($data['item_name'] ?? $data['name'] ?? $description));
 
         if ($sku === '' || $name === '') {
-            throw new InvalidArgumentException('SKU / Item Code and Product Name are required.');
+            throw new InvalidArgumentException('Model / Code and Description are required.');
         }
 
-        return Database::transaction(static function (PDO $pdo) use ($data, $sku, $name, $modelCode): int {
+        return Database::transaction(static function (PDO $pdo) use ($data, $sku, $name, $modelCode, $description): int {
             $dup = $pdo->prepare('SELECT id FROM inventory_items WHERE item_code = :code OR sku = :sku LIMIT 1');
             $dup->execute(['code' => $sku, 'sku' => $sku]);
             if ($dup->fetchColumn()) {
-                throw new InvalidArgumentException("Product SKU / Code '{$sku}' already exists.");
+                throw new InvalidArgumentException("Product Model / Code '{$sku}' already exists.");
             }
 
             $categoryId = !empty($data['category_id']) ? (int) $data['category_id'] : null;
@@ -165,7 +166,14 @@ final class ProductCatalog
             $isSerialized = isset($data['is_serialized']) ? ((int) $data['is_serialized'] === 1 ? 1 : 0) : 1;
             $warrantyMonths = isset($data['default_warranty_months']) && $data['default_warranty_months'] !== ''
                 ? max(0, (int) $data['default_warranty_months'])
-                : Setting::getInt('default_warranty_months', 24);
+                : Setting::getInt('default_warranty_months', 12);
+
+            $status = 'active';
+            if (isset($data['is_active'])) {
+                $status = !empty($data['is_active']) ? 'active' : 'inactive';
+            } elseif (isset($data['status'])) {
+                $status = ($data['status'] === 'inactive') ? 'inactive' : 'active';
+            }
 
             $stmt = $pdo->prepare(
                 'INSERT INTO inventory_items (
@@ -194,9 +202,9 @@ final class ProductCatalog
                 'reorder_qty' => max(0, (int) ($data['reorder_quantity'] ?? 10)),
                 'unit_cost' => round((float) ($data['unit_cost'] ?? 0), 2),
                 'unit_price' => round((float) ($data['unit_price'] ?? 0), 2),
-                'description' => ($data['description'] ?? '') !== '' ? trim((string) $data['description']) : null,
+                'description' => $description !== '' ? $description : null,
                 'remarks' => ($data['remarks'] ?? '') !== '' ? trim((string) $data['remarks']) : null,
-                'status' => ($data['status'] ?? 'active') === 'inactive' ? 'inactive' : 'active',
+                'status' => $status,
             ]);
 
             $itemId = (int) $pdo->lastInsertId();
@@ -221,19 +229,20 @@ final class ProductCatalog
             throw new InvalidArgumentException('Product not found.');
         }
 
-        $sku = trim((string) ($data['sku'] ?? $data['item_code'] ?? $existing['item_code']));
-        $name = trim((string) ($data['item_name'] ?? $data['name'] ?? $existing['item_name']));
-        $modelCode = trim((string) ($data['model_part_number'] ?? $data['model_code'] ?? $existing['model_part_number'] ?? $sku));
+        $modelCode = trim((string) ($data['model_code'] ?? $data['model_part_number'] ?? $data['sku'] ?? $data['item_code'] ?? $existing['model_part_number'] ?? $existing['item_code']));
+        $description = trim((string) ($data['description'] ?? $data['item_name'] ?? $data['name'] ?? $existing['description'] ?? $existing['item_name']));
+        $sku = trim((string) ($data['sku'] ?? $data['item_code'] ?? $modelCode));
+        $name = trim((string) ($data['item_name'] ?? $data['name'] ?? $description));
 
         if ($sku === '' || $name === '') {
-            throw new InvalidArgumentException('SKU / Item Code and Product Name are required.');
+            throw new InvalidArgumentException('Model / Code and Description are required.');
         }
 
         $db = Database::connection();
         $dup = $db->prepare('SELECT id FROM inventory_items WHERE (item_code = :code OR sku = :sku) AND id != :id LIMIT 1');
         $dup->execute(['code' => $sku, 'sku' => $sku, 'id' => $id]);
         if ($dup->fetchColumn()) {
-            throw new InvalidArgumentException("Product SKU / Code '{$sku}' is already in use.");
+            throw new InvalidArgumentException("Product Model / Code '{$sku}' is already in use.");
         }
 
         $categoryId = !empty($data['category_id']) ? (int) $data['category_id'] : null;
@@ -245,6 +254,13 @@ final class ProductCatalog
             if (is_string($catName) && $catName !== '') {
                 $categoryLabel = $catName;
             }
+        }
+
+        $status = (string) ($existing['status'] ?? 'active');
+        if (isset($data['is_active'])) {
+            $status = !empty($data['is_active']) ? 'active' : 'inactive';
+        } elseif (isset($data['status'])) {
+            $status = ($data['status'] === 'inactive') ? 'inactive' : 'active';
         }
 
         $stmt = $db->prepare(
@@ -282,9 +298,9 @@ final class ProductCatalog
             'reorder_qty' => isset($data['reorder_quantity']) ? max(0, (int) $data['reorder_quantity']) : (int) $existing['reorder_quantity'],
             'unit_cost' => round((float) ($data['unit_cost'] ?? $existing['unit_cost']), 2),
             'unit_price' => round((float) ($data['unit_price'] ?? $existing['unit_price']), 2),
-            'description' => ($data['description'] ?? '') !== '' ? trim((string) $data['description']) : null,
+            'description' => $description !== '' ? $description : null,
             'remarks' => ($data['remarks'] ?? '') !== '' ? trim((string) $data['remarks']) : null,
-            'status' => ($data['status'] ?? $existing['status']) === 'inactive' ? 'inactive' : 'active',
+            'status' => $status,
         ]);
     }
 

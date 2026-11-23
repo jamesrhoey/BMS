@@ -50,13 +50,14 @@ final class StockInController extends Controller
         }
 
         $this->render('iatms/stock_in/create', [
-            'pageTitle' => 'Record Stock In — Digitized Paper Form 1',
-            'activeNav' => 'iatms_stock_in_create',
-            'nextReceiptNumber' => SupplierReceipt::generateReceiptNumber(),
-            'products' => ProductCatalog::allActive(),
-            'locations' => ProductCatalog::locations(),
-            'suppliers' => Supplier::allActive(),
-            'openPos' => PurchaseOrder::getOpenOrdersForReceiving(),
+            'pageTitle'          => 'Stock In / Equipment Receiving (Form 1)',
+            'activeNav'          => 'iatms_stock_in_create',
+            'currentUser'        => $user,
+            'nextReceiptNumber'  => SupplierReceipt::generateReceiptNumber(),
+            'products'           => ProductCatalog::allActive(),
+            'locations'          => ProductCatalog::locations(),
+            'suppliers'          => Supplier::allActive(),
+            'openPos'            => PurchaseOrder::getOpenOrdersForReceiving(),
         ]);
     }
 
@@ -71,43 +72,45 @@ final class StockInController extends Controller
         $mode = (string) ($post['receiving_mode'] ?? 'direct');
 
         $header = [
-            'receipt_number' => $post['receipt_number'] ?? null,
-            'po_id' => $mode === 'po' && !empty($post['po_id']) ? (int) $post['po_id'] : null,
-            'po_number' => $post['po_number'] ?? null,
-            'po_date' => $post['po_date'] ?? null,
-            'supplier_id' => !empty($post['supplier_id']) ? (int) $post['supplier_id'] : null,
-            'supplier_name' => $post['supplier_name'] ?? null,
+            'receipt_number'          => $post['receipt_number'] ?? null,
+            'po_id'                   => $mode === 'po' && !empty($post['po_id']) ? (int) $post['po_id'] : null,
+            'po_number'               => $post['po_number'] ?? null,
+            'po_date'                 => $post['po_date'] ?? null,
+            'supplier_id'             => !empty($post['supplier_id']) ? (int) $post['supplier_id'] : null,
+            'supplier_name'           => $post['supplier_name'] ?? null,
             'destination_location_id' => !empty($post['destination_location_id']) ? (int) $post['destination_location_id'] : 1,
-            'receipt_date' => (string) ($post['receipt_date'] ?? date('Y-m-d')),
-            'delivery_to_pct_date' => (string) ($post['delivery_to_pct_date'] ?? $post['receipt_date'] ?? date('Y-m-d')),
-            'carrier' => $post['carrier'] ?? null,
-            'waybill_number' => $post['waybill_number'] ?? null,
-            'invoice_reference' => $post['invoice_reference'] ?? null,
-            'remarks' => $post['remarks'] ?? null,
+            'receipt_date'            => (string) ($post['receipt_date'] ?? date('Y-m-d')),
+            'delivery_to_pct_date'    => (string) ($post['delivery_to_pct_date'] ?? $post['receipt_date'] ?? date('Y-m-d')),
+            'carrier'                 => $post['carrier'] ?? null,
+            'waybill_number'          => $post['waybill_number'] ?? null,
+            'invoice_reference'       => $post['invoice_reference'] ?? null,
+            'remarks'                 => $post['remarks'] ?? null,
         ];
 
-        $itemIds = $post['line_item_id'] ?? [];
-        $poItemIds = $post['line_po_item_id'] ?? [];
-        $qtys = $post['line_qty'] ?? [];
-        $costs = $post['line_unit_cost'] ?? [];
-        $warranties = $post['line_warranty_months'] ?? [];
-        $serialTexts = $post['line_serials'] ?? [];
-
+        // Parse IATMS items[N][field] format (from the new form)
+        $rawItems = $post['items'] ?? [];
         $lines = [];
-        if (is_array($itemIds)) {
-            foreach ($itemIds as $i => $iid) {
-                $itemId = (int) $iid;
-                $qty = (int) ($qtys[$i] ?? 0);
+
+        if (is_array($rawItems)) {
+            foreach ($rawItems as $item) {
+                if (!is_array($item)) {
+                    continue;
+                }
+                $itemId = (int) ($item['product_id'] ?? 0);
+                $qty    = (int) ($item['quantity'] ?? 0);
                 if ($itemId <= 0 || $qty <= 0) {
                     continue;
                 }
                 $lines[] = [
-                    'inventory_item_id' => $itemId,
-                    'po_item_id' => !empty($poItemIds[$i]) ? (int) $poItemIds[$i] : null,
-                    'quantity_received' => $qty,
-                    'unit_cost' => (float) ($costs[$i] ?? 0),
-                    'warranty_duration_months' => isset($warranties[$i]) && $warranties[$i] !== '' ? (int) $warranties[$i] : 24,
-                    'serial_numbers' => (string) ($serialTexts[$i] ?? ''),
+                    'inventory_item_id'      => $itemId,
+                    'po_item_id'             => !empty($item['po_item_id']) ? (int) $item['po_item_id'] : null,
+                    'quantity_received'      => $qty,
+                    'unit_cost'              => (float) ($item['unit_cost'] ?? 0),
+                    'warranty_duration_months' => isset($item['warranty_duration_months']) && $item['warranty_duration_months'] !== ''
+                        ? (int) $item['warranty_duration_months']
+                        : 12,
+                    'serial_numbers'         => (string) ($item['serials'] ?? ''),
+                    'description'            => trim((string) ($item['description'] ?? '')),
                 ];
             }
         }

@@ -66,13 +66,15 @@
                     <?php foreach ($products as $p): ?>
                         <tr>
                             <td>
-                                <div class="fw-semibold font-monospace"><?= e($p['sku']) ?></div>
-                                <div class="text-secondary small"><?= e($p['model_code']) ?></div>
+                                <div class="fw-semibold font-monospace"><?= e($p['model_code']) ?></div>
+                                <?php if (!empty($p['sku']) && $p['sku'] !== $p['model_code']): ?>
+                                    <div class="text-secondary small">SKU: <?= e($p['sku']) ?></div>
+                                <?php endif; ?>
                             </td>
                             <td>
-                                <div class="fw-medium"><?= e($p['item_name']) ?></div>
-                                <?php if (!empty($p['description'])): ?>
-                                    <div class="text-secondary small text-truncate" style="max-width:320px;"><?= e($p['description']) ?></div>
+                                <div class="fw-medium"><?= e($p['description'] ?: $p['item_name']) ?></div>
+                                <?php if (!empty($p['remarks'])): ?>
+                                    <div class="text-secondary small text-truncate" style="max-width:320px;"><?= e($p['remarks']) ?></div>
                                 <?php endif; ?>
                             </td>
                             <td><?= e($p['category_name'] ?: $p['category']) ?></td>

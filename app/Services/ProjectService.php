@@ -13,6 +13,7 @@ use App\Models\Notification;
 use App\Models\Project;
 use App\Models\ProjectDocument;
 use App\Models\ProjectWorkflowHistory;
+use App\Services\DocumentStorageService;
 use PDOException;
 
 final class ProjectService
@@ -76,13 +77,43 @@ final class ProjectService
             return ['success' => false, 'errors' => $validator->errors()];
         }
 
+        // Controlled category validation: 'mrc' or 'special_project'
+        $rawCategory = trim((string) ($input['project_category'] ?? 'mrc'));
+        $projectCategoryKey = MarketingChecklistService::normalizeCategory($rawCategory);
+        $projectCategoryLabel = MarketingChecklistService::categoryLabel($projectCategoryKey);
+        $workflowType = $projectCategoryKey;
+
         $actorId = (int) $actor['id'];
+
+        // Prevent rapid accidental duplicate submission on double-click / browser refresh
+        $pdo = Database::connection();
+        $recentStmt = $pdo->prepare(
+            'SELECT id, project_code FROM projects
+             WHERE project_name = :pname AND client_name = :cname AND created_by = :created_by
+               AND created_at >= DATE_SUB(NOW(), INTERVAL 10 SECOND)
+             ORDER BY id DESC LIMIT 1'
+        );
+        $recentStmt->execute([
+            'pname' => $projectName,
+            'cname' => $clientName,
+            'created_by' => $actorId,
+        ]);
+        $existingRecent = $recentStmt->fetch();
+        if ($existingRecent !== false) {
+            return [
+                'success' => true,
+                'project_id' => (int) $existingRecent['id'],
+                'project_code' => (string) $existingRecent['project_code'],
+                'project_category' => $projectCategoryKey,
+                'category_label' => $projectCategoryLabel,
+            ];
+        }
+
         $mktDept = Department::findByCode(Department::CODE_MARKETING);
         $mktDeptId = $mktDept !== null ? (int) $mktDept['id'] : null;
         $originDepartmentId = AuthorizationService::isMarketingUser($actor)
             ? ($mktDeptId ?? $currentDepartmentId)
             : ($currentDepartmentId ?? $mktDeptId);
-        $workflowType = (string) Config::get('marketing.default_workflow', 'standard');
 
         $created = Database::transaction(static function () use (
             $projectName,
@@ -91,6 +122,7 @@ final class ProjectService
             $projectLocation,
             $projectDescription,
             $workflowType,
+            $projectCategoryLabel,
             $originDepartmentId,
             $currentDepartmentId,
             $actorId,
@@ -110,6 +142,7 @@ final class ProjectService
                         'project_location' => $projectLocation,
                         'project_description' => $projectDescription,
                         'workflow_type' => $workflowType,
+                        'project_category' => $projectCategoryLabel,
                         'origin_department_id' => $originDepartmentId,
                         'current_department_id' => $currentDepartmentId,
                         'created_by' => $actorId,
@@ -133,14 +166,24 @@ final class ProjectService
                 'from_department_id' => null,
                 'to_department_id' => $currentDepartmentId,
                 'acted_by' => $actorId,
-                'notes' => 'Draft project registered.',
+                'notes' => "Draft project registered under category '{$projectCategoryLabel}'.",
             ]);
 
             ActivityLogger::log(
                 'project.created',
                 'project',
                 $projectId,
-                "Registered draft project '{$projectCode}' ({$projectName}) for client '{$clientName}'.",
+                "Registered draft project '{$projectCode}' ({$projectName}) [Category: {$projectCategoryLabel}] for client '{$clientName}'.",
+                $request,
+                $actorId,
+                false
+            );
+
+            ActivityLogger::log(
+                'project.category_selected',
+                'project',
+                $projectId,
+                "Assigned project category '{$projectCategoryLabel}' to '{$projectCode}'.",
                 $request,
                 $actorId,
                 false
@@ -156,6 +199,8 @@ final class ProjectService
             'success' => true,
             'project_id' => $created['project_id'],
             'project_code' => $created['project_code'],
+            'project_category' => $projectCategoryKey,
+            'category_label' => $projectCategoryLabel,
         ];
     }
 
@@ -352,16 +397,20 @@ final class ProjectService
                 'project.submission_blocked_incomplete',
                 'project',
                 (int) $project['id'],
-                "Blocked submission of project '{$project['project_code']}' due to missing required Marketing documents: " . implode(', ', $missingList) . '.',
+                "Blocked submission of project '{$project['project_code']}' ({$checklist['category_label']}) due to missing required Marketing documents: " . implode(', ', $missingList) . '.',
                 $request,
                 (int) $actor['id'],
                 false
             );
 
+            $poNotice = ($checklist['is_po_required'] && in_array('Marketing PO', $missingList, true))
+                ? ' Note: Special Projects require an uploaded Marketing Purchase Order (PO).'
+                : '';
+
             return [
                 'success' => false,
                 'missing_documents' => $missingList,
-                'error' => 'Cannot submit to Project Management. Required documents missing: ' . implode(', ', $missingList) . '.',
+                'error' => 'Cannot submit project. Required documents missing: ' . implode(', ', $missingList) . '.' . $poNotice,
             ];
         }
 
@@ -373,38 +422,73 @@ final class ProjectService
             ];
         }
 
+        $afinDept = Department::findByCode(Department::CODE_ADMIN_FINANCE);
+        if ($afinDept === null) {
+            return [
+                'success' => false,
+                'error' => 'Admin Finance department record is missing from system configuration.',
+            ];
+        }
+
         $pmDeptId = (int) $pmDept['id'];
+        $afinDeptId = (int) $afinDept['id'];
         $projectId = (int) $project['id'];
         $actorId = (int) $actor['id'];
 
-        $isResubmission = $currentStatus === Project::STATUS_RETURNED_FOR_CORRECTIONS
-            || !empty($project['returned_at']);
+        $isResubmission = in_array($currentStatus, [
+            Project::STATUS_RETURNED_FOR_CORRECTIONS,
+            Project::STATUS_RETURNED_TO_MARKETING,
+            Project::STATUS_RETURNED_TO_MARKETING_SHORT,
+        ], true) || !empty($project['returned_at']);
 
+        // Official Workflow Status: Submitted to Project Management and Admin Finance
         $targetStatus = $isResubmission
-            ? Project::STATUS_RESUBMITTED_FOR_VERIFICATION
-            : Project::STATUS_SUBMITTED_FOR_VERIFICATION;
+            ? Project::STATUS_RESUBMITTED_TO_PM_AND_AFIN
+            : Project::STATUS_SUBMITTED_TO_PM_AND_AFIN;
 
-        $historyAction = $isResubmission
+        $historyActionPm = $isResubmission
             ? 'resubmitted_for_verification'
             : 'submitted_for_verification';
 
+        $historyActionAfin = $isResubmission
+            ? 'resubmitted_to_admin_finance'
+            : 'submitted_to_admin_finance';
+
         $logAction = $isResubmission
+            ? 'project.resubmitted'
+            : 'project.submitted';
+
+        $notifTypePm = $isResubmission
             ? 'project.resubmitted_to_pm'
             : 'project.submitted_to_pm';
 
-        $notifType = $isResubmission
-            ? 'project.resubmitted_to_pm'
-            : 'project.submitted_to_pm';
+        $notifTitlePm = $isResubmission
+            ? "Project Resubmitted for Verification: {$project['project_code']}"
+            : "New Project Submitted for Verification: {$project['project_code']}";
 
-        $notifTitle = $isResubmission
-            ? "Project Resubmitted for Document Verification: {$project['project_code']}"
-            : "New Project Submitted for Document Verification: {$project['project_code']}";
-
-        $notifMessage = sprintf(
-            "%s (%s) was %s by %s with all %d required Marketing documents uploaded and awaits Project Management completeness verification.",
+        $notifMessagePm = sprintf(
+            "%s (%s) [%s] was %s by %s with all %d required Marketing documents uploaded and awaits Project Management completeness verification.",
             $project['project_name'],
             $project['project_code'],
+            $checklist['category_label'],
             $isResubmission ? 'resubmitted after corrections' : 'submitted',
+            $actor['full_name'] ?? $actor['username'],
+            $checklist['required_count']
+        );
+
+        $notifTypeAfin = $isResubmission
+            ? 'project.resubmitted_to_afin'
+            : 'project.submitted_to_afin';
+
+        $notifTitleAfin = $isResubmission
+            ? "Project Resubmitted (Admin Finance Copy): {$project['project_code']}"
+            : "New Project Submitted (Admin Finance Copy): {$project['project_code']}";
+
+        $notifMessageAfin = sprintf(
+            "%s (%s) [%s] was simultaneously submitted to Admin Finance by %s with all %d required Marketing documents.",
+            $project['project_name'],
+            $project['project_code'],
+            $checklist['category_label'],
             $actor['full_name'] ?? $actor['username'],
             $checklist['required_count']
         );
@@ -414,37 +498,74 @@ final class ProjectService
             $projectId,
             $currentStatus,
             $targetStatus,
-            $historyAction,
+            $isResubmission,
+            $historyActionPm,
+            $historyActionAfin,
             $logAction,
             $pmDeptId,
+            $afinDeptId,
             $actorId,
             $submissionNotes,
-            $notifType,
-            $notifTitle,
-            $notifMessage,
+            $notifTypePm,
+            $notifTitlePm,
+            $notifMessagePm,
+            $notifTypeAfin,
+            $notifTitleAfin,
+            $notifMessageAfin,
+            $checklist,
             $request
         ): void {
-            Project::markSubmittedToProjectManagement($projectId, $targetStatus, $pmDeptId, $actorId);
+            // Update project record with simultaneous submission timestamps and status
+            Project::markSubmittedSimultaneous($projectId, $targetStatus, $pmDeptId, $actorId);
 
+            // If resubmitting, reset previously flagged documents back to pending review
+            if ($isResubmission) {
+                ProjectDocument::resetCorrectionToPending($projectId);
+            }
+
+            // Record assignment 1: Project Management Incoming Queue
             ProjectWorkflowHistory::record([
                 'project_id' => $projectId,
                 'from_status' => $currentStatus,
                 'to_status' => $targetStatus,
-                'action' => $historyAction,
+                'action' => $historyActionPm,
                 'from_department_id' => $project['current_department_id'],
                 'to_department_id' => $pmDeptId,
                 'acted_by' => $actorId,
                 'notes' => $submissionNotes !== ''
                     ? $submissionNotes
-                    : 'All required Marketing checklist documents uploaded and forwarded to Project Management for verification.',
+                    : "All {$checklist['required_count']} required Marketing checklist documents uploaded and forwarded to Project Management for verification.",
             ]);
 
+            // Record assignment 2: Admin Finance Incoming Queue (Simultaneous)
+            ProjectWorkflowHistory::record([
+                'project_id' => $projectId,
+                'from_status' => $currentStatus,
+                'to_status' => $targetStatus,
+                'action' => $historyActionAfin,
+                'from_department_id' => $project['current_department_id'],
+                'to_department_id' => $afinDeptId,
+                'acted_by' => $actorId,
+                'notes' => "Project simultaneously routed to Admin Finance incoming queue per official workflow.",
+            ]);
+
+            // Send notification 1: Project Management
             Notification::notifyDepartmentUsers(
                 $pmDeptId,
                 $projectId,
-                $notifType,
-                $notifTitle,
-                $notifMessage,
+                $notifTypePm,
+                $notifTitlePm,
+                $notifMessagePm,
+                '/projects/' . $projectId
+            );
+
+            // Send notification 2: Admin Finance (Simultaneous)
+            Notification::notifyDepartmentUsers(
+                $afinDeptId,
+                $projectId,
+                $notifTypeAfin,
+                $notifTitleAfin,
+                $notifMessageAfin,
                 '/projects/' . $projectId
             );
 
@@ -452,7 +573,7 @@ final class ProjectService
                 $logAction,
                 'project',
                 $projectId,
-                "Forwarded project '{$project['project_code']}' ({$project['project_name']}) to Project Management with status '{$targetStatus}'.",
+                "Submitted project '{$project['project_code']}' ({$checklist['category_label']}) simultaneously to Project Management and Admin Finance with status '{$targetStatus}'.",
                 $request,
                 $actorId,
                 false
@@ -652,6 +773,319 @@ final class ProjectService
     }
 
     /**
+     * Verify or flag a single document within a project's PM review.
+     * Status: 'verified' or 'needs_correction'.
+     */
+    public static function verifyDocument(
+        array $project,
+        int $docId,
+        string $status,
+        string $notes,
+        array $actor,
+        Request $request
+    ): array {
+        if (!AuthorizationService::canVerifyDocument($actor, $project)) {
+            return ['success' => false, 'error' => 'You are not authorized to verify documents for this project.'];
+        }
+
+        $validStatuses = ['verified', 'needs_correction'];
+        if (!in_array($status, $validStatuses, true)) {
+            return ['success' => false, 'error' => 'Invalid review status. Use "verified" or "needs_correction".'];
+        }
+
+        $notes = trim($notes);
+        if ($status === 'needs_correction' && $notes === '') {
+            return ['success' => false, 'error' => 'Correction notes are required when flagging a document as Needs Correction.'];
+        }
+        if (mb_strlen($notes, 'UTF-8') > 2000) {
+            return ['success' => false, 'error' => 'Notes must not exceed 2,000 characters.'];
+        }
+
+        // Load the document and verify it belongs to this project
+        $document = ProjectDocument::findById($docId);
+        if ($document === null || (int) $document['project_id'] !== (int) $project['id']) {
+            return ['success' => false, 'error' => 'Document not found or does not belong to this project.'];
+        }
+
+        if (!$document['is_current']) {
+            return ['success' => false, 'error' => 'Only the current version of a document can be verified.'];
+        }
+
+        // Cannot verify a document that has not been uploaded
+        if (in_array((string) $document['review_status'], ['', 'pending'], true)) {
+            return ['success' => false, 'error' => 'Cannot verify a document that has not been uploaded.'];
+        }
+
+        $actorId = (int) $actor['id'];
+        $projectId = (int) $project['id'];
+
+        ProjectDocument::updateReviewStatus($docId, $status, $notes !== '' ? $notes : null, $actorId);
+
+        $actionKey = $status === 'verified' ? 'project.document_verified' : 'project.document_needs_correction';
+        $desc = $status === 'verified'
+            ? "PM reviewer '{$actor['full_name']}' marked document '{$document['document_type']}' as Verified on project '{$project['project_code']}'."
+            : "PM reviewer '{$actor['full_name']}' flagged document '{$document['document_type']}' as Needs Correction on project '{$project['project_code']}'. Notes: {$notes}";
+
+        ActivityLogger::log($actionKey, 'project', $projectId, $desc, $request, $actorId, false);
+
+        return ['success' => true];
+    }
+
+    /**
+     * Upload or replace the JOM (Job Order Memorandum) file for a PM-approved project.
+     * Only Project Management users and Administrators may upload JOM files.
+     */
+    public static function uploadJomFile(
+        array $project,
+        array $actor,
+        Request $request
+    ): array {
+        if (!AuthorizationService::canUploadJom($actor, $project)) {
+            return ['success' => false, 'error' => 'You are not authorized to upload the JOM file, or the project is not yet approved by Project Management.'];
+        }
+
+        $file = $request->file('jom_document');
+        $uploadNotes = trim((string) $request->post('upload_notes', ''));
+
+        // Use DocumentStorageService but bypass the WORKFLOW_DOCUMENT_TYPES whitelist
+        // by calling storeUploadedDocument directly with 'JOM — Job Order Memorandum' type
+        $result = DocumentStorageService::storeUploadedDocument(
+            $project,
+            $file,
+            'JOM — Job Order Memorandum',
+            $actor,
+            $request,
+            $uploadNotes
+        );
+
+        if (!$result['success']) {
+            return $result;
+        }
+
+        $newDocId = (int) ($result['document_id'] ?? 0);
+        $projectId = (int) $project['id'];
+        $actorId = (int) $actor['id'];
+
+        Database::transaction(static function () use ($project, $projectId, $actorId, $newDocId, $actor, $request): void {
+            Project::markJomUploaded($projectId, $newDocId, $actorId);
+
+            $currentStatus = (string) ($project['status'] ?? '');
+            ProjectWorkflowHistory::record([
+                'project_id'          => $projectId,
+                'from_status'         => $currentStatus,
+                'to_status'           => Project::STATUS_JOM_UPLOADED,
+                'action'              => 'jom_uploaded',
+                'from_department_id'  => $project['current_department_id'],
+                'to_department_id'    => $project['current_department_id'],
+                'acted_by'            => $actorId,
+                'notes'               => 'JOM file uploaded by Project Management.',
+            ]);
+
+            // Notify Marketing of JOM upload
+            $mktDept = Department::findByCode(Department::CODE_MARKETING);
+            if ($mktDept !== null) {
+                Notification::notifyDepartmentUsers(
+                    (int) $mktDept['id'],
+                    $projectId,
+                    'project.jom_uploaded',
+                    "JOM File Uploaded: {$project['project_code']}",
+                    sprintf(
+                        "%s (%s): Project Management has uploaded the JOM file. The project is ready to be forwarded to Operations.",
+                        $project['project_name'],
+                        $project['project_code']
+                    ),
+                    '/projects/' . $projectId
+                );
+            }
+
+            ActivityLogger::log(
+                'project.jom_uploaded',
+                'project',
+                $projectId,
+                "PM user '{$actor['full_name']}' uploaded the JOM file for project '{$project['project_code']}'.",
+                $request,
+                $actorId,
+                false
+            );
+        });
+
+        return ['success' => true, 'document_id' => $newDocId, 'replaced' => !empty($result['replaced'])];
+    }
+
+    /**
+     * Forward a JOM-uploaded project from Project Management to Operations.
+     * Category-specific document set: MRC (JOM, SON, BOM, SLD) or Special Project (JOM, PO, SON, BOM, SLD).
+     * CA, PROP, PROP-SUPPLIER are NEVER forwarded to Operations.
+     */
+    public static function pmForwardToOperations(
+        array $project,
+        array $input,
+        array $actor,
+        Request $request
+    ): array {
+        if (!AuthorizationService::canPmForwardToOperations($actor, $project)) {
+            return [
+                'success' => false,
+                'error'   => 'You are not authorized to forward this project to Operations, or the project has not met forwarding requirements.',
+            ];
+        }
+
+        $projectId = (int) $project['id'];
+        $actorId   = (int) $actor['id'];
+
+        // JOM must exist
+        $jomDoc = ProjectDocument::findCurrentJom($projectId);
+        if ($jomDoc === null) {
+            return ['success' => false, 'error' => 'Cannot forward to Operations: JOM file has not been uploaded yet.'];
+        }
+
+        // Determine category
+        $rawCat = (string) ($project['project_category'] ?? $project['workflow_type'] ?? 'mrc');
+        $category = MarketingChecklistService::normalizeCategory($rawCat);
+        $pmConfig  = Config::get('pm');
+        $handoffConfig = $category === 'special_project'
+            ? ($pmConfig['ops_handoff']['special_project'] ?? [])
+            : ($pmConfig['ops_handoff']['mrc'] ?? []);
+        $requiredTypes = $handoffConfig['required_documents'] ?? ['JOM', 'SON', 'BOM', 'SLD'];
+
+        // Collect required documents (excluding JOM already found)
+        $handoffDocs = ['JOM' => $jomDoc];
+        $missing     = [];
+
+        foreach ($requiredTypes as $type) {
+            if ($type === 'JOM') {
+                continue;
+            }
+            $doc = ProjectDocument::findCurrentByType($projectId, $type);
+            if ($doc === null && $type === 'PO') {
+                $doc = ProjectDocument::findCurrentByType($projectId, 'Marketing PO')
+                    ?? ProjectDocument::findCurrentByType($projectId, 'PO — Purchase Order')
+                    ?? ProjectDocument::findCurrentByType($projectId, 'Purchase Order');
+            }
+            if ($doc === null) {
+                $missing[] = $type;
+            } else {
+                $handoffDocs[$type] = $doc;
+            }
+        }
+
+        if ($missing !== []) {
+            return [
+                'success' => false,
+                'error'   => 'Cannot forward: missing required documents: ' . implode(', ', $missing) . '.',
+            ];
+        }
+
+        $opsDept = Department::findByCode(Department::CODE_OPERATIONS);
+        if ($opsDept === null) {
+            return ['success' => false, 'error' => 'Operations department configuration is missing.'];
+        }
+
+        $opsDeptId  = (int) $opsDept['id'];
+        $pmDeptId   = (int) ($project['current_department_id'] ?? 0);
+        $forwardNotes = trim((string) ($input['forward_notes'] ?? ''));
+        if ($forwardNotes === '') {
+            $forwardNotes = "Project forwarded to Operations by Project Management with category-specific document package ({$category}).";
+        }
+        if (mb_strlen($forwardNotes, 'UTF-8') > 2000) {
+            return ['success' => false, 'error' => 'Forwarding notes must not exceed 2,000 characters.'];
+        }
+
+        $sonDoc = $handoffDocs['SON'] ?? null;
+        $bomDoc = $handoffDocs['BOM'] ?? null;
+        $sldDoc = $handoffDocs['SLD'] ?? null;
+        $poDoc  = $handoffDocs['PO'] ?? null;
+
+        $handoffSummary = [];
+        foreach ($handoffDocs as $type => $doc) {
+            $handoffSummary[] = [
+                'type'              => $type,
+                'document_id'       => (int) $doc['id'],
+                'original_filename' => $doc['original_filename'],
+            ];
+        }
+
+        $success = Database::transaction(static function () use (
+            $project,
+            $projectId,
+            $opsDeptId,
+            $pmDeptId,
+            $actorId,
+            $actor,
+            $jomDoc,
+            $sonDoc,
+            $bomDoc,
+            $sldDoc,
+            $poDoc,
+            $forwardNotes,
+            $handoffSummary,
+            $category,
+            $opsDept,
+            $request
+        ): bool {
+            $forwarded = Project::markForwardedToOpsByPm(
+                $projectId,
+                $opsDeptId,
+                $actorId,
+                (int) $jomDoc['id'],
+                (int) ($sonDoc['id'] ?? 0),
+                (int) ($bomDoc['id'] ?? 0),
+                (int) ($sldDoc['id'] ?? 0),
+                $poDoc !== null ? (int) $poDoc['id'] : null,
+                $forwardNotes,
+                $handoffSummary
+            );
+
+            if (!$forwarded) {
+                return false;
+            }
+
+            ProjectWorkflowHistory::record([
+                'project_id'         => $projectId,
+                'from_status'        => Project::STATUS_JOM_UPLOADED,
+                'to_status'          => Project::STATUS_FORWARDED_TO_OPS,
+                'action'             => 'forwarded_to_operations',
+                'from_department_id' => $pmDeptId,
+                'to_department_id'   => $opsDeptId,
+                'acted_by'           => $actorId,
+                'notes'              => $forwardNotes,
+            ]);
+
+            Notification::notifyDepartmentUsers(
+                $opsDeptId,
+                $projectId,
+                'project.forwarded_to_operations',
+                "New Project Received from PM: {$project['project_code']}",
+                sprintf(
+                    "%s (%s) has been forwarded to Operations by Project Management. Category: %s. Document package ready for review.",
+                    $project['project_name'],
+                    $project['project_code'],
+                    strtoupper($category)
+                ),
+                '/projects/' . $projectId
+            );
+
+            ActivityLogger::log(
+                'project.pm_forwarded_to_operations',
+                'project',
+                $projectId,
+                "PM user '{$actor['full_name']}' forwarded project '{$project['project_code']}' to Operations. Category: {$category}. Documents forwarded: " . implode(', ', array_keys($handoffSummary[0] ?? [])),
+                $request,
+                $actorId,
+                false
+            );
+
+            return true;
+        });
+
+        if (!$success) {
+            return ['success' => false, 'error' => 'This project has already been forwarded to Operations. Duplicate forwarding prevented.'];
+        }
+
+        return ['success' => true];
+    }
+
+    /**
      * Approve and complete the document verification stage for a project.
      * Enforces complete presence of all required documents (6 of 6).
      * Does NOT issue a JOM number (Admin Finance is responsible for JOM issuance).
@@ -693,6 +1127,17 @@ final class ProjectService
                 'success' => false,
                 'error' => 'Cannot complete verification. All required documents must be present. Missing: ' . implode(', ', $missingList) . '.',
             ];
+        }
+
+        // Enforce that no documents have unresolved correction flags
+        $currentDocs = ProjectDocument::currentForProject((int) $project['id']);
+        foreach ($currentDocs as $cdoc) {
+            if (($cdoc['review_status'] ?? '') === 'needs_correction') {
+                return [
+                    'success' => false,
+                    'error' => 'Cannot complete verification while documents have unresolved correction flags. Return to Marketing or mark as Verified.',
+                ];
+            }
         }
 
         $verificationNotes = trim((string) ($input['verification_notes'] ?? ''));

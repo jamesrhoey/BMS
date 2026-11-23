@@ -68,7 +68,11 @@ final class ProjectController extends Controller
             'pageTitle' => 'Register New Project',
             'activeNav' => 'projects_create',
             'departments' => Department::allActive(),
-            'checklistDefinitions' => MarketingChecklistService::checklistDefinition(),
+            'categories' => (array) Config::get('marketing.categories', []),
+            'defaultCategory' => (string) Config::get('marketing.default_workflow', 'mrc'),
+            'checklistDefinitions' => MarketingChecklistService::checklistDefinition('mrc'),
+            'mrcChecklist' => MarketingChecklistService::checklistDefinition('mrc'),
+            'specialChecklist' => MarketingChecklistService::checklistDefinition('special_project'),
             'formAction' => '/projects',
             'backUrl' => AuthorizationService::isMarketingUser($user) ? '/marketing/projects' : '/projects',
         ]);
@@ -170,7 +174,11 @@ final class ProjectController extends Controller
             'canDownloadDocument' => AuthorizationService::canDownloadDocument($user, $project),
             'canReturnToMarketing' => AuthorizationService::canReturnProjectToMarketing($user, $project),
             'canStartReview' => AuthorizationService::canStartReview($user, $project),
+            'canVerifyDocument' => AuthorizationService::canVerifyDocument($user, $project),
             'canCompleteVerification' => AuthorizationService::canCompleteVerification($user, $project),
+            'canUploadJom' => AuthorizationService::canUploadJom($user, $project),
+            'canPmForwardToOps' => AuthorizationService::canPmForwardToOperations($user, $project),
+            'jomDocument' => ProjectDocument::findCurrentJom($projectId),
             'canForwardToAdminFinance' => AuthorizationService::canForwardToAdminFinance($user, $project),
             'canStartAdminFinanceReview' => AuthorizationService::canStartAdminFinanceReview($user, $project),
             'canIssueJomNumber' => AuthorizationService::canIssueJomNumber($user, $project),
@@ -189,6 +197,10 @@ final class ProjectController extends Controller
             'canReceiveDelivery' => $activePo !== null && AuthorizationService::canReceiveSupplierDelivery($user, $project, $activePo),
             'canExecuteStockIn' => $activeDelivery !== null && AuthorizationService::canExecuteStockIn($user, $project, $activeDelivery),
             'operationsHandoffDocs' => ProjectDocument::operationsHandoffDocuments($projectId),
+            'opsDocuments' => ProjectDocument::opsUploadedDocuments($projectId),
+            'canUploadOpsDocument' => AuthorizationService::canUploadOpsDocument($user, $project),
+            'canSubmitToOpsFinance' => AuthorizationService::canSubmitToOpsFinance($user, $project),
+            'isSubmittedToOpsFinance' => Project::isSubmittedToOpsFinance($project),
             'jomConfig' => (array) Config::get('app.jom', []),
             'prConfig' => (array) Config::get('pm.pr', []),
             'actualBomConfig' => (array) Config::get('pm.actual_bom', []),
@@ -306,10 +318,10 @@ final class ProjectController extends Controller
             Response::redirect('/projects/' . $projectId . '#submission-panel');
         }
 
-        $newStatus = (string) ($result['new_status'] ?? Project::STATUS_SUBMITTED_FOR_VERIFICATION);
+        $newStatus = (string) ($result['new_status'] ?? Project::STATUS_SUBMITTED_TO_PM_AND_AFIN);
         Session::flash(
             'success',
-            "Project '{$project['project_code']}' has been forwarded to Project Management ({$newStatus}). JOM issuance awaits PM verification."
+            "Project '{$project['project_code']}' has been submitted simultaneously to Project Management and Admin Finance ({$newStatus})."
         );
         Response::redirect('/projects/' . $projectId);
     }

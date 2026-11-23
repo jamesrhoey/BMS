@@ -4,149 +4,160 @@ $perPage = (int) ($pagination['per_page'] ?? 10);
 $totalRows = (int) ($pagination['total'] ?? 0);
 $hasActiveFilters = ($filters['q'] ?? '') !== ''
     || ($filters['status'] ?? '') !== ''
+    || ($filters['category'] ?? '') !== ''
     || ($filters['sort'] ?? 'received') !== 'received'
     || ($filters['date_from'] ?? '') !== ''
-    || ($filters['date_to'] ?? '') !== ''
-    || ($filters['jom_number'] ?? '') !== '';
+    || ($filters['date_to'] ?? '') !== '';
 
-$buildPageUrl = static function (int $targetPage) use ($filters): string {
-    $query = array_filter([
-        'q' => $filters['q'] ?? '',
-        'status' => $filters['status'] ?? '',
-        'sort' => ($filters['sort'] ?? 'received') !== 'received' ? $filters['sort'] : '',
-        'date_from' => $filters['date_from'] ?? '',
-        'date_to' => $filters['date_to'] ?? '',
-        'jom_number' => $filters['jom_number'] ?? '',
-        'page' => $targetPage > 1 ? (string) $targetPage : '',
-    ], static fn($v): bool => $v !== '');
+$currentCategory = strtolower((string) ($filters['category'] ?? ''));
 
-    return url('/operations/dashboard' . ($query !== [] ? '?' . http_build_query($query) : ''));
+$buildCategoryUrl = static function (string $cat) use ($filters): string {
+    $q = array_filter(array_merge($filters, [
+        'category' => $cat,
+        'page' => 1,
+    ]), static fn($v): bool => $v !== '');
+    return url('/operations/dashboard' . ($q !== [] ? '?' . http_build_query($q) : ''));
 };
 
-$prFormatPattern = (string) ($prConfig['format'] ?? '{PREFIX}-{YEAR}{MONTH}-{SEQ}');
-$prRequiresConfirmation = (bool) ($prConfig['requires_business_confirmation'] ?? true);
+$buildPageUrl = static function (int $targetPage) use ($filters): string {
+    $query = array_filter(array_merge($filters, [
+        'page' => $targetPage > 1 ? (string) $targetPage : '',
+    ]), static fn($v): bool => $v !== '');
+    return url('/operations/dashboard' . ($query !== [] ? '?' . http_build_query($query) : ''));
+};
 ?>
 
-<!-- Operational Overview Cards -->
-<div class="row g-3 mb-3">
-    <div class="col-6 col-xl-3">
-        <div class="bms-stat-card">
-            <div class="bms-stat-label">Projects Received from Admin Finance</div>
-            <div class="bms-stat-value text-primary"><?= (int) ($stats['received_from_admin_finance'] ?? 0) ?></div>
-            <div class="small text-secondary mt-1">JOM + SLD + Marketing BOM received</div>
-        </div>
+<!-- Category Filter Pills -->
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+    <div class="btn-group bms-category-pills" role="group" aria-label="Project Category">
+        <a href="<?= $buildCategoryUrl('') ?>" class="btn btn-sm <?= $currentCategory === '' ? 'btn-primary active' : 'btn-outline-secondary' ?>">
+            All Projects (<?= (int) ($stats['total_received'] ?? 0) ?>)
+        </a>
+        <a href="<?= $buildCategoryUrl('mrc') ?>" class="btn btn-sm <?= $currentCategory === 'mrc' ? 'btn-primary active' : 'btn-outline-secondary' ?>">
+            <span class="badge bg-light text-dark me-1">MRC</span> Projects (<?= (int) ($stats['mrc_projects'] ?? 0) ?>)
+        </a>
+        <a href="<?= $buildCategoryUrl('special_project') ?>" class="btn btn-sm <?= $currentCategory === 'special_project' ? 'btn-primary active' : 'btn-outline-secondary' ?>">
+            <span class="badge bg-light text-dark me-1">Special</span> Projects (<?= (int) ($stats['special_projects'] ?? 0) ?>)
+        </a>
     </div>
 
-    <div class="col-6 col-xl-3">
-        <div class="bms-stat-card">
-            <div class="bms-stat-label">Projects Awaiting PR Preparation</div>
-            <div class="bms-stat-value text-warning"><?= (int) ($stats['awaiting_pr_preparation'] ?? 0) ?></div>
-            <div class="small text-secondary mt-1">No Purchase Request started</div>
-        </div>
-    </div>
-
-    <div class="col-6 col-xl-3">
-        <div class="bms-stat-card">
-            <div class="bms-stat-label">PRs Being Prepared</div>
-            <div class="bms-stat-value text-info"><?= (int) ($stats['prs_being_prepared'] ?? 0) ?></div>
-            <div class="small text-secondary mt-1">Draft or returned for revision</div>
-        </div>
-    </div>
-
-    <div class="col-6 col-xl-3">
-        <div class="bms-stat-card">
-            <div class="bms-stat-label">PRs Submitted to OPS Finance</div>
-            <div class="bms-stat-value text-success"><?= (int) ($stats['prs_submitted_to_ops_finance'] ?? 0) ?></div>
-            <div class="small text-secondary mt-1">Pending review &amp; Actual BOM</div>
-        </div>
+    <div class="text-secondary small">
+        Showing <?= number_format($totalRows) ?> total project<?= $totalRows === 1 ? '' : 's' ?>
     </div>
 </div>
 
-<!-- Purchase Request Lifecycle Metrics Bar (Phase 2) -->
-<div class="row g-2 mb-4">
-    <div class="col-6 col-md-3 col-xl">
-        <div class="bms-card p-2 text-center">
-            <div class="small text-secondary fw-semibold">Total PRs</div>
-            <div class="h5 fw-bold mb-0 text-dark"><?= (int) ($stats['total_prs'] ?? 0) ?></div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3 col-xl">
-        <div class="bms-card p-2 text-center">
-            <div class="small text-secondary fw-semibold">Draft PRs</div>
-            <div class="h5 fw-bold mb-0 text-secondary"><?= (int) ($stats['draft_prs'] ?? 0) ?></div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3 col-xl">
-        <div class="bms-card p-2 text-center">
-            <div class="small text-secondary fw-semibold">Pending PRs</div>
-            <div class="h5 fw-bold mb-0 text-warning"><?= (int) ($stats['pending_prs'] ?? 0) ?></div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3 col-xl">
-        <div class="bms-card p-2 text-center">
-            <div class="small text-secondary fw-semibold">Returned PRs</div>
-            <div class="h5 fw-bold mb-0 text-danger"><?= (int) ($stats['returned_prs'] ?? 0) ?></div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3 col-xl">
-        <div class="bms-card p-2 text-center">
-            <div class="small text-secondary fw-semibold">Approved PRs</div>
-            <div class="h5 fw-bold mb-0 text-success"><?= (int) ($stats['approved_prs'] ?? 0) ?></div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3 col-xl">
-        <div class="bms-card p-2 text-center">
-            <div class="small text-secondary fw-semibold">PRs Converted to PO</div>
-            <div class="h5 fw-bold mb-0 text-info"><?= (int) ($stats['converted_po_prs'] ?? 0) ?></div>
-        </div>
-    </div>
-    <div class="col-6 col-md-3 col-xl">
-        <div class="bms-card p-2 text-center">
-            <div class="small text-secondary fw-semibold">PRs Awaiting Purchasing</div>
-            <div class="h5 fw-bold mb-0 text-primary"><?= (int) ($stats['awaiting_purchasing_prs'] ?? 0) ?></div>
-        </div>
-    </div>
-</div>
-
-<?php if ($prRequiresConfirmation): ?>
-    <div class="bms-card p-3 mb-4 border-start border-4 border-info bg-light">
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 small">
-            <div>
-                <span class="badge badge-soft-info me-1">Configurable PR Number Format</span>
-                <strong class="text-dark">Configured Pattern: <code class="text-dark"><?= e($prFormatPattern) ?></code></strong>
-                <span class="text-secondary ms-1">
-                    — Configurable in <code>config/pm.php</code> (<code>BMS_PR_FORMAT</code>).
-                </span>
+<!-- 8 Official Operations Department KPI Metric Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <a href="<?= url('/operations/projects') ?>" class="text-decoration-none">
+            <div class="bms-stat-card">
+                <div class="bms-stat-label">Total Projects Received</div>
+                <div class="bms-stat-value text-primary"><?= (int) ($stats['total_received'] ?? 0) ?></div>
+                <div class="small text-secondary mt-1">Forwarded by Project Management</div>
             </div>
-            <a href="<?= url('/operations/projects') ?>" class="btn btn-outline-secondary btn-sm py-0 px-2">Open Full Operations Queue &rarr;</a>
-        </div>
+        </a>
     </div>
-<?php endif; ?>
 
+    <div class="col-6 col-md-3">
+        <a href="<?= url('/operations/projects?category=mrc') ?>" class="text-decoration-none">
+            <div class="bms-stat-card">
+                <div class="bms-stat-label">MRC Projects Received</div>
+                <div class="bms-stat-value text-info"><?= (int) ($stats['mrc_projects'] ?? 0) ?></div>
+                <div class="small text-secondary mt-1">Maintenance &amp; Repair Contracts</div>
+            </div>
+        </a>
+    </div>
+
+    <div class="col-6 col-md-3">
+        <a href="<?= url('/operations/projects?category=special_project') ?>" class="text-decoration-none">
+            <div class="bms-stat-card">
+                <div class="bms-stat-label">Special Projects Received</div>
+                <div class="bms-stat-value text-indigo" style="color: #6f42c1;"><?= (int) ($stats['special_projects'] ?? 0) ?></div>
+                <div class="small text-secondary mt-1">Custom &amp; Capital Installations</div>
+            </div>
+        </a>
+    </div>
+
+    <div class="col-6 col-md-3">
+        <a href="<?= url('/operations/projects?status=incoming') ?>" class="text-decoration-none">
+            <div class="bms-stat-card">
+                <div class="bms-stat-label">Pending OPS Processing</div>
+                <div class="bms-stat-value text-warning"><?= (int) ($stats['pending_processing'] ?? 0) ?></div>
+                <div class="small text-secondary mt-1">Newly arrived, untouched</div>
+            </div>
+        </a>
+    </div>
+
+    <div class="col-6 col-md-3">
+        <a href="<?= url('/operations/projects?status=processing') ?>" class="text-decoration-none">
+            <div class="bms-stat-card">
+                <div class="bms-stat-label">Projects in Progress</div>
+                <div class="bms-stat-value text-secondary"><?= (int) ($stats['under_processing'] ?? 0) ?></div>
+                <div class="small text-secondary mt-1">Under OPS processing</div>
+            </div>
+        </a>
+    </div>
+
+    <div class="col-6 col-md-3">
+        <a href="<?= url('/operations/projects?status=missing_documents') ?>" class="text-decoration-none">
+            <div class="bms-stat-card">
+                <div class="bms-stat-label">Missing OPS Documents</div>
+                <div class="bms-stat-value text-danger"><?= (int) ($stats['missing_documents'] ?? 0) ?></div>
+                <div class="small text-secondary mt-1">Need Final SLD / BOM / Request PR</div>
+            </div>
+        </a>
+    </div>
+
+    <div class="col-6 col-md-3">
+        <a href="<?= url('/operations/projects?status=documents_complete') ?>" class="text-decoration-none">
+            <div class="bms-stat-card">
+                <div class="bms-stat-label">Completed OPS Submissions</div>
+                <div class="bms-stat-value text-success"><?= (int) ($stats['documents_complete'] ?? 0) ?></div>
+                <div class="small text-secondary mt-1">Ready for OPS Finance submission</div>
+            </div>
+        </a>
+    </div>
+
+    <div class="col-6 col-md-3">
+        <a href="<?= url('/operations/projects?status=submitted_opfin') ?>" class="text-decoration-none">
+            <div class="bms-stat-card">
+                <div class="bms-stat-label">Submitted to OPS Finance</div>
+                <div class="bms-stat-value text-dark"><?= (int) ($stats['submitted_to_opfin'] ?? 0) ?></div>
+                <div class="small text-secondary mt-1">Handoff complete (read-only)</div>
+            </div>
+        </a>
+    </div>
+</div>
+
+<!-- Projects Table Panel -->
 <div class="bms-table-panel">
     <form method="GET" action="<?= url('/operations/dashboard') ?>" class="bms-table-toolbar flex-wrap gap-2">
-        <h3 class="h6 fw-bold mb-0 me-auto">Operations Incoming Projects &amp; Purchase Request Queue</h3>
+        <h3 class="h6 fw-bold mb-0 me-auto">Operations Projects Queue</h3>
 
-        <select id="status" name="status" class="form-select form-select-sm bms-toolbar-select" aria-label="Filter by PR status">
-            <option value="">All Incoming Projects</option>
-            <option value="awaiting_pr" <?= ($filters['status'] ?? '') === 'awaiting_pr' ? 'selected' : '' ?>>Awaiting PR Preparation</option>
-            <option value="preparing_pr" <?= in_array(($filters['status'] ?? ''), ['preparing_pr', 'draft'], true) ? 'selected' : '' ?>>PRs Being Prepared (Draft)</option>
-            <option value="submitted_pr" <?= in_array(($filters['status'] ?? ''), ['submitted_pr', 'pending'], true) ? 'selected' : '' ?>>PRs Submitted to OPS Finance (Pending)</option>
-            <option value="returned" <?= ($filters['status'] ?? '') === 'returned' ? 'selected' : '' ?>>Returned for Revision</option>
-            <option value="rejected" <?= ($filters['status'] ?? '') === 'rejected' ? 'selected' : '' ?>>Rejected PRs</option>
-            <option value="approved" <?= ($filters['status'] ?? '') === 'approved' ? 'selected' : '' ?>>Approved PRs</option>
-            <option value="converted_po" <?= ($filters['status'] ?? '') === 'converted_po' ? 'selected' : '' ?>>Converted to PO / Ordered</option>
-            <option value="awaiting_purchasing" <?= ($filters['status'] ?? '') === 'awaiting_purchasing' ? 'selected' : '' ?>>Awaiting Purchasing</option>
+        <?php if ($currentCategory !== ''): ?>
+            <input type="hidden" name="category" value="<?= e($currentCategory) ?>">
+        <?php endif; ?>
+
+        <!-- Status Filter -->
+        <select id="status" name="status" class="form-select form-select-sm bms-toolbar-select" aria-label="Filter by Status">
+            <option value="">All Statuses</option>
+            <option value="incoming" <?= ($filters['status'] ?? '') === 'incoming' ? 'selected' : '' ?>>Pending Processing</option>
+            <option value="processing" <?= ($filters['status'] ?? '') === 'processing' ? 'selected' : '' ?>>In Progress</option>
+            <option value="missing_documents" <?= ($filters['status'] ?? '') === 'missing_documents' ? 'selected' : '' ?>>Missing OPS Documents</option>
+            <option value="documents_complete" <?= ($filters['status'] ?? '') === 'documents_complete' ? 'selected' : '' ?>>OPS Documents Complete</option>
+            <option value="submitted_opfin" <?= ($filters['status'] ?? '') === 'submitted_opfin' ? 'selected' : '' ?>>Submitted to OPS Finance</option>
         </select>
 
-        <select id="sort" name="sort" class="form-select form-select-sm bms-toolbar-select" aria-label="Sort by date">
+        <!-- Sorting -->
+        <select id="sort" name="sort" class="form-select form-select-sm bms-toolbar-select" aria-label="Sort Order">
             <option value="received" <?= ($filters['sort'] ?? 'received') === 'received' ? 'selected' : '' ?>>Date Received &darr;</option>
-            <option value="pr_date" <?= ($filters['sort'] ?? '') === 'pr_date' ? 'selected' : '' ?>>PR Date &darr;</option>
-            <option value="pr_number" <?= ($filters['sort'] ?? '') === 'pr_number' ? 'selected' : '' ?>>PR Number &darr;</option>
             <option value="oldest" <?= ($filters['sort'] ?? '') === 'oldest' ? 'selected' : '' ?>>Oldest First</option>
-            <option value="client" <?= ($filters['sort'] ?? '') === 'client' ? 'selected' : '' ?>>Client Name</option>
+            <option value="name" <?= ($filters['sort'] ?? '') === 'name' ? 'selected' : '' ?>>Project Name</option>
+            <option value="code" <?= ($filters['sort'] ?? '') === 'code' ? 'selected' : '' ?>>Project Code</option>
+            <option value="status" <?= ($filters['sort'] ?? '') === 'status' ? 'selected' : '' ?>>Status</option>
         </select>
 
+        <!-- Date Range -->
         <div class="d-flex align-items-center gap-1">
             <input type="date"
                    id="date_from"
@@ -154,8 +165,7 @@ $prRequiresConfirmation = (bool) ($prConfig['requires_business_confirmation'] ??
                    value="<?= e($filters['date_from'] ?? '') ?>"
                    class="form-control form-control-sm"
                    style="max-width: 135px;"
-                   title="PR Date From"
-                   placeholder="From">
+                   title="Received Date From">
             <span class="text-secondary small">&ndash;</span>
             <input type="date"
                    id="date_to"
@@ -163,128 +173,140 @@ $prRequiresConfirmation = (bool) ($prConfig['requires_business_confirmation'] ??
                    value="<?= e($filters['date_to'] ?? '') ?>"
                    class="form-control form-control-sm"
                    style="max-width: 135px;"
-                   title="PR Date To"
-                   placeholder="To">
+                   title="Received Date To">
         </div>
 
-        <input type="text"
-               id="q"
-               name="q"
-               value="<?= e($filters['q'] ?? '') ?>"
-               class="form-control form-control-sm bms-toolbar-input"
-               placeholder="Search project, client, JOM, PR, requester...">
-
-        <button type="submit" class="bms-toolbar-icon-btn" title="Apply Filters" aria-label="Apply Filters">
-            <?= bms_icon('search', 16) ?>
-        </button>
+        <!-- Search Input -->
+        <div class="input-group input-group-sm bms-toolbar-search">
+            <input type="text"
+                   id="q"
+                   name="q"
+                   value="<?= e($filters['q'] ?? '') ?>"
+                   class="form-control"
+                   placeholder="Search code, name, client..."
+                   aria-label="Search projects">
+            <button class="btn btn-outline-secondary" type="submit" title="Search">
+                <?= bms_icon('search', 14) ?>
+            </button>
+        </div>
 
         <?php if ($hasActiveFilters): ?>
-            <a href="<?= url('/operations/dashboard') ?>" class="bms-toolbar-icon-btn bms-toolbar-icon-btn--outline" title="Clear Filters" aria-label="Clear Filters">
-                <?= bms_icon('reset', 16) ?>
+            <a href="<?= url('/operations/dashboard') ?>" class="btn btn-sm btn-link text-decoration-none text-danger" title="Clear Filters">
+                Clear
             </a>
         <?php endif; ?>
     </form>
 
     <div class="table-responsive">
-        <table class="table mb-0">
-            <thead>
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
                 <tr>
-                    <th style="width: 20%;">Project Name</th>
-                    <th style="width: 13%;">Client / End User</th>
-                    <th style="width: 10%;">JOM Number</th>
-                    <th style="width: 11%;">SLD</th>
-                    <th style="width: 11%;">Marketing BOM</th>
-                    <th style="width: 17%;">Purchase Request</th>
-                    <th style="width: 9%;">Date Received</th>
-                    <th class="text-end" style="width: 9%;">Available Actions</th>
+                    <th scope="col" style="min-width: 140px;">Project Code</th>
+                    <th scope="col" style="min-width: 180px;">Project Name</th>
+                    <th scope="col">Client</th>
+                    <th scope="col" class="text-center" style="width: 110px;">Category</th>
+                    <th scope="col" style="min-width: 120px;">Received Date</th>
+                    <th scope="col" class="text-center" style="min-width: 140px;">Status</th>
+                    <th scope="col" class="text-center" style="min-width: 140px;">OPS Documents</th>
+                    <th scope="col" class="text-end" style="min-width: 130px;">Action</th>
                 </tr>
             </thead>
             <tbody>
-                <?php if ($projects === []): ?>
+                <?php if (empty($projects)): ?>
                     <tr>
-                        <td colspan="8" class="text-center text-secondary py-4 small">
-                            No incoming projects from Admin Finance currently match the Operations filter criteria.
+                        <td colspan="8" class="text-center text-secondary py-5">
+                            <div class="mb-2"><?= bms_icon('folder', 32) ?></div>
+                            <strong>No projects found in Operations queue.</strong>
+                            <div class="small mt-1">Projects will automatically appear here once forwarded by Project Management with JOM and category documents.</div>
                         </td>
                     </tr>
                 <?php else: ?>
-                    <?php foreach ($projects as $proj): ?>
+                    <?php foreach ($projects as $item): ?>
                         <?php
-                        $pId = (int) $proj['id'];
-                        $pStatus = (string) ($proj['status'] ?? '');
-                        $sldDocId = !empty($proj['ops_sld_document_id']) ? (int) $proj['ops_sld_document_id'] : 0;
-                        $bomDocId = !empty($proj['ops_bom_document_id']) ? (int) $proj['ops_bom_document_id'] : 0;
-                        $prNumber = (string) ($proj['pr_number'] ?? '');
-                        $prStatus = (string) ($proj['pr_status'] ?? '');
-                        $prItemsCount = (int) ($proj['pr_items_count'] ?? 0);
-                        $prPurpose = (string) ($proj['pr_purpose'] ?? '');
-                        $requesterName = (string) ($proj['requester_name'] ?? '');
+                        $isSpecial = ($item['category_label'] ?? '') === 'Special Project';
+                        $receivedDate = !empty($item['forwarded_to_ops_at']) ? date('M d, Y', strtotime((string) $item['forwarded_to_ops_at'])) : '—';
+                        $opsDocsCount = (int) ($item['ops_uploaded_count'] ?? 0);
+                        $isOpsComplete = !empty($item['is_ops_complete']);
+                        $isSubmittedOpfin = !empty($item['is_submitted_to_opfin']);
                         ?>
                         <tr>
                             <td>
-                                <a href="<?= url('/projects/' . $pId . '#operations-pr-panel') ?>" class="project-name text-decoration-none" title="<?= e($proj['project_name']) ?>">
-                                    <?= e($proj['project_name']) ?>
+                                <a href="<?= url('/operations/projects/' . $item['id']) ?>" class="fw-semibold text-primary text-decoration-none">
+                                    <?= e($item['project_code']) ?>
                                 </a>
-                                <div class="cell-subtext font-monospace" title="<?= e($proj['project_code']) ?>"><?= e($proj['project_code']) ?></div>
-                            </td>
-                            <td>
-                                <div class="cell-text" title="<?= e($proj['client_name']) ?>"><?= e($proj['client_name']) ?></div>
-                            </td>
-                            <td>
-                                <?php if (!empty($proj['jom_number'])): ?>
-                                    <span class="badge bg-primary font-monospace"><?= e($proj['jom_number']) ?></span>
-                                <?php else: ?>
-                                    <span class="text-secondary small">—</span>
+                                <?php if (!empty($item['jom_number'])): ?>
+                                    <div class="small text-muted font-monospace"><?= e($item['jom_number']) ?></div>
                                 <?php endif; ?>
                             </td>
                             <td>
-                                <?php if ($sldDocId > 0): ?>
-                                    <div class="cell-text fw-semibold" title="<?= e($proj['sld_filename'] ?? 'SLD') ?>">
-                                        <?= e($proj['sld_filename'] ?? 'SLD Document') ?>
-                                    </div>
-                                    <div class="cell-subtext">
-                                        <a href="<?= url('/projects/' . $pId . '/documents/' . $sldDocId . '/view') ?>">View</a>
-                                        &bull;
-                                        <a href="<?= url('/projects/' . $pId . '/documents/' . $sldDocId . '/download') ?>" class="text-secondary">Download</a>
-                                    </div>
-                                <?php else: ?>
-                                    <span class="text-secondary small">Not linked</span>
+                                <div class="fw-medium text-dark text-truncate" style="max-width: 240px;" title="<?= e($item['project_name']) ?>">
+                                    <?= e($item['project_name']) ?>
+                                </div>
+                                <div class="small text-secondary text-truncate" style="max-width: 240px;">
+                                    <?= e($item['project_location'] ?? 'No location') ?>
+                                </div>
+                            </td>
+                            <td class="small">
+                                <div class="text-dark fw-medium"><?= e($item['client_name']) ?></div>
+                                <?php if (!empty($item['client_contact'])): ?>
+                                    <div class="text-muted small"><?= e($item['client_contact']) ?></div>
                                 <?php endif; ?>
                             </td>
-                            <td>
-                                <?php if ($bomDocId > 0): ?>
-                                    <div class="cell-text fw-semibold" title="<?= e($proj['bom_filename'] ?? 'Marketing BOM') ?>">
-                                        <?= e($proj['bom_filename'] ?? 'Marketing BOM') ?>
-                                    </div>
-                                    <div class="cell-subtext">
-                                        <a href="<?= url('/projects/' . $pId . '/documents/' . $bomDocId . '/view') ?>">View</a>
-                                        &bull;
-                                        <a href="<?= url('/projects/' . $pId . '/documents/' . $bomDocId . '/download') ?>" class="text-secondary">Download</a>
-                                    </div>
+                            <td class="text-center">
+                                <?php if ($isSpecial): ?>
+                                    <span class="badge bg-purple text-white" style="background-color: #6f42c1;">Special Project</span>
                                 <?php else: ?>
-                                    <span class="text-secondary small">Not linked</span>
+                                    <span class="badge bg-info text-dark">MRC</span>
                                 <?php endif; ?>
                             </td>
-                            <td>
-                                <?php if ($prNumber !== ''): ?>
-                                    <div class="d-flex align-items-center gap-1">
-                                        <span class="font-monospace fw-semibold cell-text" style="max-width: 90px;"><?= e($prNumber) ?></span>
-                                        <span class="badge <?= pr_status_badge_class($prStatus) ?>"><?= e($prStatus) ?></span>
-                                    </div>
-                                    <div class="cell-subtext" title="<?= !empty($prPurpose) ? 'Purpose: ' . e($prPurpose) : '' ?>">
-                                        <?= $prItemsCount ?> item<?= $prItemsCount === 1 ? '' : 's' ?><?php if ($requesterName !== ''): ?> &bull; <?= e($requesterName) ?><?php endif; ?>
-                                    </div>
-                                <?php else: ?>
-                                    <span class="badge badge-soft-warning">Awaiting PR Preparation</span>
+                            <td class="small text-secondary">
+                                <?= e($receivedDate) ?>
+                                <?php if (!empty($item['forwarded_to_ops_by_name'])): ?>
+                                    <div class="text-muted small">by <?= e($item['forwarded_to_ops_by_name']) ?></div>
                                 <?php endif; ?>
                             </td>
-                            <td class="text-nowrap">
-                                <div class="cell-subtext"><?= format_datetime($proj['forwarded_to_ops_at'] ?? null) ?></div>
+                            <td class="text-center">
+                                <?php if ($isSubmittedOpfin): ?>
+                                    <span class="badge bg-dark">Submitted to OPS Finance</span>
+                                <?php elseif ($isOpsComplete): ?>
+                                    <span class="badge bg-success">OPS Documents Complete</span>
+                                <?php elseif ($opsDocsCount > 0): ?>
+                                    <span class="badge bg-warning text-dark">Under OPS Processing</span>
+                                <?php else: ?>
+                                    <span class="badge bg-secondary">Pending Processing</span>
+                                <?php endif; ?>
                             </td>
-                            <td class="text-end text-nowrap">
-                                <a href="<?= url('/projects/' . $pId . '#operations-pr-panel') ?>"
-                                   class="btn btn-sm <?= $prNumber === '' || in_array($prStatus, ['Draft', 'Returned for Corrections', 'Returned for Revision'], true) ? 'btn-primary' : 'btn-outline-primary' ?>">
-                                    <?= $prNumber === '' ? 'Prepare PR' : (in_array($prStatus, ['Draft', 'Returned for Corrections', 'Returned for Revision'], true) ? 'Edit PR' : 'View') ?>
-                                </a>
+                            <td class="text-center">
+                                <div class="d-flex align-items-center justify-content-center gap-1">
+                                    <!-- Final SLD -->
+                                    <span class="badge <?= !empty($item['has_final_sld']) ? 'bg-success' : 'bg-light text-muted border' ?>"
+                                          title="<?= !empty($item['has_final_sld']) ? 'Final SLD Uploaded' : 'Final SLD Missing' ?>">
+                                        SLD
+                                    </span>
+                                    <!-- Final BOM -->
+                                    <span class="badge <?= !empty($item['has_final_bom']) ? 'bg-success' : 'bg-light text-muted border' ?>"
+                                          title="<?= !empty($item['has_final_bom']) ? 'Final BOM Uploaded' : 'Final BOM Missing' ?>">
+                                        BOM
+                                    </span>
+                                    <!-- Request of PR -->
+                                    <span class="badge <?= !empty($item['has_request_pr']) ? 'bg-success' : 'bg-light text-muted border' ?>"
+                                          title="<?= !empty($item['has_request_pr']) ? 'Request of PR Uploaded' : 'Request of PR Missing' ?>">
+                                        PR
+                                    </span>
+                                </div>
+                                <div class="small text-muted mt-1"><?= $opsDocsCount ?> / 3 uploaded</div>
+                            </td>
+                            <td class="text-end">
+                                <div class="btn-group btn-group-sm">
+                                    <a href="<?= url('/operations/projects/' . $item['id']) ?>" class="btn btn-outline-primary" title="View Project Details">
+                                        View
+                                    </a>
+                                    <?php if (!$isSubmittedOpfin): ?>
+                                        <a href="<?= url('/operations/projects/' . $item['id'] . '#ops-documents') ?>" class="btn btn-outline-secondary" title="Upload Documents">
+                                            Upload
+                                        </a>
+                                    <?php endif; ?>
+                                </div>
                             </td>
                         </tr>
                     <?php endforeach; ?>
@@ -293,5 +315,33 @@ $prRequiresConfirmation = (bool) ($prConfig['requires_business_confirmation'] ??
         </table>
     </div>
 
-    <?= render_table_footer($currentPage, $perPage, count($projects), $totalRows, $buildPageUrl) ?>
+    <!-- Pagination -->
+    <?php if ($totalRows > $perPage): ?>
+        <div class="bms-table-pagination d-flex align-items-center justify-content-between p-3 border-top">
+            <div class="text-secondary small">
+                Showing <?= number_format(min($totalRows, ($currentPage - 1) * $perPage + 1)) ?> to <?= number_format(min($totalRows, $currentPage * $perPage)) ?> of <?= number_format($totalRows) ?> records
+            </div>
+            <nav aria-label="Dashboard pagination">
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item <?= $currentPage <= 1 ? 'disabled' : '' ?>">
+                        <a class="page-link" href="<?= $buildPageUrl($currentPage - 1) ?>" aria-label="Previous">&laquo;</a>
+                    </li>
+                    <?php
+                    $totalPages = (int) ($pagination['total_pages'] ?? 1);
+                    for ($p = 1; $p <= $totalPages; $p++):
+                        if ($p === 1 || $p === $totalPages || ($p >= $currentPage - 1 && $p <= $currentPage + 1)):
+                    ?>
+                        <li class="page-item <?= $p === $currentPage ? 'active' : '' ?>">
+                            <a class="page-link" href="<?= $buildPageUrl($p) ?>"><?= $p ?></a>
+                        </li>
+                    <?php elseif ($p === $currentPage - 2 || $p === $currentPage + 2): ?>
+                        <li class="page-item disabled"><span class="page-link">&hellip;</span></li>
+                    <?php endif; endfor; ?>
+                    <li class="page-item <?= $currentPage >= $totalPages ? 'disabled' : '' ?>">
+                        <a class="page-link" href="<?= $buildPageUrl($currentPage + 1) ?>" aria-label="Next">&raquo;</a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    <?php endif; ?>
 </div>

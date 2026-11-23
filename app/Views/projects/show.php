@@ -45,6 +45,12 @@ $selectedFlagged = is_array($oldFlagged) ? array_map('strval', $oldFlagged) : []
     <div>
         <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
             <span class="font-monospace badge badge-soft-secondary fs-6"><?= e($project['project_code']) ?></span>
+            <?php
+            $catVal = $project['project_category'] ?? ($project['workflow_type'] === 'special_project' ? 'Special Project' : 'MRC');
+            $catLabel = (strcasecmp($catVal, 'Special Project') === 0 || ($project['workflow_type'] ?? '') === 'special_project') ? 'Special Project' : 'MRC';
+            $catBadgeClass = $catLabel === 'Special Project' ? 'bg-primary text-white' : 'badge-soft-info';
+            ?>
+            <span class="badge <?= $catBadgeClass ?> px-3 py-2 fw-semibold"><?= e($catLabel) ?></span>
             <span class="badge <?= project_status_badge_class($status) ?> px-3 py-2"><?= e($status) ?></span>
             <?php if ($isChecklistComplete): ?>
                 <span class="badge badge-soft-success px-2 py-2"><?= $uploadedRequiredCount ?>/<?= $requiredCount ?> Required Docs Uploaded</span>
@@ -502,7 +508,7 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <div class="small">
                     <strong>Supplementary Attachments (Optional):</strong>
-                    <span class="text-secondary">Additional supporting files outside the 6 mandatory checklist items.</span>
+                    <span class="text-secondary">Additional supporting files outside the <?= (int) $requiredCount ?> mandatory checklist items.</span>
                 </div>
                 <?php if (!empty($canUploadDocument)): ?>
                     <a
@@ -601,46 +607,51 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
         <?php if (!empty($canSubmit)): ?>
             <div id="submission-panel" class="bms-card p-4 mb-4 border-start border-4 <?= $isChecklistComplete ? 'border-success' : 'border-warning' ?>">
                 <h3 class="h6 fw-bold mb-2">
-                    <?= in_array($status, ['Returned for Corrections', 'Returned to Marketing for Corrections'], true) ? 'Resubmit Project to Project Management' : 'Submit to Project Management for Document Verification' ?>
+                    <?= in_array($status, ['Returned for Corrections', 'Returned to Marketing for Corrections', 'Returned to Marketing'], true) ? 'Resubmit Project to Project Management and Admin Finance' : 'Submit to Project Management and Admin Finance' ?>
                 </h3>
 
                 <?php if (!$isChecklistComplete): ?>
                     <p class="small text-secondary mb-2">
-                        <strong><?= count($missingRequiredTypes) ?> of <?= $requiredCount ?> required Marketing document<?= count($missingRequiredTypes) === 1 ? ' is' : 's are' ?> still missing</strong> (all <?= $requiredCount ?> must be uploaded before Project Management verification):
+                        <strong><?= count($missingRequiredTypes) ?> of <?= $requiredCount ?> required Marketing document<?= count($missingRequiredTypes) === 1 ? ' is' : 's are' ?> still missing</strong> (all <?= $requiredCount ?> must be uploaded before submission):
                     </p>
                     <div class="mb-3">
                         <?php foreach ($missingRequiredTypes as $missingType): ?>
                             <span class="badge badge-soft-danger me-1 mb-1"><?= e($missingType) ?> — Missing</span>
                         <?php endforeach; ?>
                     </div>
+                    <?php if ($catLabel === 'Special Project'): ?>
+                        <div class="small alert alert-warning py-2 px-3 mb-3">
+                            <strong>Special Project Requirement:</strong> Marketing Purchase Order (PO) issued by client is mandatory for submission.
+                        </div>
+                    <?php endif; ?>
                 <?php else: ?>
                     <p class="small text-secondary mb-3">
-                        All <strong><?= $requiredCount ?> required Marketing documents</strong> have been uploaded. Submitting forwards this project to the <strong>Project Management</strong> review queue for document completeness verification.
+                        All <strong><?= $requiredCount ?> required Marketing documents</strong> have been uploaded. Submitting forwards this project simultaneously to both <strong>Project Management</strong> and <strong>Admin Finance</strong> review queues.
                     </p>
                 <?php endif; ?>
 
                 <form
                     method="POST"
                     action="<?= url('/projects/' . $projectId . '/submit') ?>"
-                    <?= $isChecklistComplete ? 'data-confirm="Confirm forwarding project \'' . e($project['project_code']) . '\' to Project Management for document verification?"' : '' ?>
+                    <?= $isChecklistComplete ? 'data-confirm="Confirm forwarding project \'' . e($project['project_code']) . '\' simultaneously to Project Management and Admin Finance?"' : '' ?>
                 >
                     <?= csrf_field() ?>
                     <div class="mb-3">
-                        <label for="submission_notes" class="form-label small fw-medium mb-1">Handoff Remarks for Project Management (Optional)</label>
-                        <textarea id="submission_notes" name="submission_notes" rows="2" maxlength="1000" class="form-control form-control-sm" placeholder="Summarize document package highlights or revision notes for PM..."></textarea>
+                        <label for="submission_notes" class="form-label small fw-medium mb-1">Handoff Remarks for Project Management &amp; Admin Finance (Optional)</label>
+                        <textarea id="submission_notes" name="submission_notes" rows="2" maxlength="1000" class="form-control form-control-sm" placeholder="Summarize document package highlights or revision notes for PM and Admin Finance..."></textarea>
                     </div>
                     <div class="d-flex flex-wrap gap-2">
-                        <button type="submit" class="btn <?= $isChecklistComplete ? 'btn-success' : 'btn-outline-secondary btn-sm' ?> fw-semibold">
-                            <?= in_array($status, ['Returned for Corrections', 'Returned to Marketing for Corrections'], true) ? 'Resubmit' : 'Submit' ?>
+                        <button type="submit" class="btn <?= $isChecklistComplete ? 'btn-success' : 'btn-outline-secondary btn-sm' ?> fw-semibold" <?= !$isChecklistComplete ? 'disabled' : '' ?>>
+                            <?= in_array($status, ['Returned for Corrections', 'Returned to Marketing for Corrections', 'Returned to Marketing'], true) ? 'Resubmit Project' : 'Submit Project' ?>
                         </button>
                     </div>
                 </form>
             </div>
-        <?php elseif (in_array($status, ['Submitted for Document Verification', 'Submitted for Verification', 'Resubmitted for Verification', 'Submitted'], true)): ?>
+        <?php elseif (in_array($status, ['Submitted to Project Management and Admin Finance', 'Resubmitted to Project Management and Admin Finance', 'Submitted for Document Verification', 'Submitted for Verification', 'Resubmitted for Verification', 'Submitted', 'Under Project Management Review'], true)): ?>
             <div id="submission-panel" class="bms-card p-4 mb-4 border-start border-4 border-primary">
-                <h3 class="h6 fw-bold mb-1">Queued with Project Management for Document Verification</h3>
+                <h3 class="h6 fw-bold mb-1">Queued with Project Management &amp; Admin Finance</h3>
                 <p class="small text-secondary mb-0">
-                    Marketing edits and document replacements are locked while Project Management reviews the submitted package. If Project Management flags incomplete or discrepant files, the project will be returned to Marketing for corrections.
+                    This project has been submitted simultaneously to Project Management and Admin Finance. Marketing edits and document replacements are locked during review. If revisions are requested, the project will be returned to Marketing with correction notes.
                 </p>
             </div>
         <?php endif; ?>
@@ -687,7 +698,7 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
                         </div>
                     <?php endif; ?>
                     <div class="small text-secondary">
-                        Verification completeness checks all 6 standard Marketing documents (SON, SLD, BOM, CA, Proposal to Client, Proposal from Supplier).
+                        Verification completeness checks all <?= (int) $requiredCount ?> required <?= e($catLabel) ?> Marketing documents<?= $catLabel === 'Special Project' ? ' (including mandatory Purchase Order)' : ' (Purchase Order not required for MRC)' ?>.
                     </div>
                 </div>
 
@@ -883,6 +894,85 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
                         </div>
                     <?php endif; ?>
                 </div>
+
+                <!-- Dedicated PM Document Verification Page Link -->
+                <div class="mt-3 p-3 bg-white rounded border d-flex flex-wrap justify-content-between align-items-center gap-2">
+                    <div>
+                        <div class="fw-semibold small text-primary"><i class="bi bi-clipboard-check me-1"></i>Dedicated Document Verification Workspace</div>
+                        <div class="text-secondary small">Perform per-document verification, inspection, and line-item decision recording.</div>
+                    </div>
+                    <a href="<?= url('/pm/projects/' . $projectId . '/verification') ?>" class="btn btn-sm btn-primary">
+                        <i class="bi bi-box-arrow-up-right me-1"></i>Open Verification Page
+                    </a>
+                </div>
+
+                <!-- PM Official Workflow: JOM File Upload Section -->
+                <?php if (!empty($canUploadJom) || !empty($jomDocument)): ?>
+                    <div class="mt-3 p-3 bg-white rounded border border-success border-opacity-50">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="fw-bold mb-0 text-success"><i class="bi bi-file-earmark-arrow-up me-1"></i>Job Order Memorandum (JOM) File Upload</h6>
+                            <?php if (!empty($jomDocument)): ?>
+                                <span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>JOM Uploaded (v<?= (int) ($jomDocument['version_number'] ?? 1) ?>)</span>
+                            <?php else: ?>
+                                <span class="badge bg-warning text-dark">Awaiting JOM Upload</span>
+                            <?php endif; ?>
+                        </div>
+
+                        <?php if (!empty($jomDocument)): ?>
+                            <div class="p-2 bg-light rounded small mb-2 d-flex justify-content-between align-items-center">
+                                <div>
+                                    <i class="bi bi-file-earmark-pdf text-danger me-1"></i>
+                                    <strong><?= e($jomDocument['original_filename']) ?></strong>
+                                    <span class="text-muted ms-1">(v<?= (int) ($jomDocument['version_number'] ?? 1) ?> &bull; <?= number_format(((int) ($jomDocument['file_size'] ?? 0)) / 1024, 1) ?> KB)</span>
+                                    <div class="text-secondary" style="font-size: 0.75rem;">
+                                        Uploaded by <?= e($jomDocument['uploader_name'] ?? 'PM') ?> on <?= format_datetime($jomDocument['created_at']) ?>
+                                    </div>
+                                </div>
+                                <div>
+                                    <a href="<?= url('/projects/' . $projectId . '/documents/' . (int) $jomDocument['id'] . '/download') ?>" class="btn btn-xs btn-outline-secondary btn-sm">
+                                        <i class="bi bi-download me-1"></i>Download
+                                    </a>
+                                </div>
+                            </div>
+                        <?php endif; ?>
+
+                        <?php if (!empty($canUploadJom)): ?>
+                            <form method="POST" action="<?= url('/pm/projects/' . $projectId . '/upload-jom') ?>" enctype="multipart/form-data" class="mt-2">
+                                <?= csrf_field() ?>
+                                <div class="row g-2 align-items-end">
+                                    <div class="col-md-5">
+                                        <label class="form-label small fw-semibold mb-1"><?= !empty($jomDocument) ? 'Replace JOM File' : 'Select JOM File (PDF/DOCX/XLSX)' ?> <span class="text-danger">*</span></label>
+                                        <input type="file" name="jom_document" class="form-control form-control-sm" required accept=".pdf,.doc,.docx,.xls,.xlsx">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label small fw-semibold mb-1">Upload Notes (Optional)</label>
+                                        <input type="text" name="upload_notes" class="form-control form-control-sm" placeholder="e.g. Official JOM approved and signed">
+                                    </div>
+                                    <div class="col-md-3">
+                                        <button type="submit" class="btn btn-sm btn-success w-100">
+                                            <i class="bi bi-upload me-1"></i><?= !empty($jomDocument) ? 'Upload New Version' : 'Upload JOM File' ?>
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        <?php endif; ?>
+                    </div>
+                <?php endif; ?>
+
+                <!-- PM Official Workflow: Forward to Operations Section -->
+                <?php if (!empty($canPmForwardToOps)): ?>
+                    <div class="mt-3 p-3 bg-white rounded border border-primary shadow-sm d-flex flex-wrap justify-content-between align-items-center gap-2">
+                        <div>
+                            <div class="fw-bold text-primary"><i class="bi bi-send-check me-1"></i>Ready for Operations Handoff</div>
+                            <div class="text-secondary small">
+                                All required Marketing documents and the official JOM file are verified. Forward the category-specific handoff package to Operations.
+                            </div>
+                        </div>
+                        <a href="<?= url('/pm/projects/' . $projectId . '/forward-ops') ?>" class="btn btn-success fw-semibold">
+                            <i class="bi bi-send-check me-1"></i>Forward to Operations
+                        </a>
+                    </div>
+                <?php endif; ?>
             </div>
         <?php endif; ?>
 
@@ -1101,6 +1191,19 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
             </div>
         <?php endif; ?>
         <?php if ($isForwardedToOps || !empty($isOperationsUser)): ?>
+            <div class="alert alert-primary d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4 shadow-sm border-primary">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="fs-4 text-primary"><i class="bi bi-gear-fill"></i></span>
+                    <div>
+                        <div class="fw-bold text-dark">Operations Department Workspace Available</div>
+                        <div class="text-secondary small">Access the official Operations workspace to review handoff documents, upload Final SLD, Final BOM, and Request of PR.</div>
+                    </div>
+                </div>
+                <a href="<?= url('/operations/projects/' . $projectId) ?>" class="btn btn-primary btn-sm fw-bold">
+                    Open Operations Workspace &rarr;
+                </a>
+            </div>
+
             <!-- Operations Handoff Package (JOM Number, SLD & Marketing BOM) -->
             <div id="operations-handoff-package" class="bms-card p-4 mb-4 border-start border-4 border-info">
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">

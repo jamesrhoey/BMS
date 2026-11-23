@@ -28,6 +28,17 @@ final class DocumentStorageService
         'PR Attachment',
         'Actual BOM',
         'Actual BOM Supporting Document',
+        'Final SLD — Single Line Diagram',
+        'Final SLD',
+        'FINAL_SLD',
+        'Final BOM — Bill of Materials',
+        'Final BOM',
+        'FINAL_BOM',
+        'Request of PR — Purchase Requisition Request',
+        'Request of PR',
+        'REQUEST_OF_PR',
+        'JOM — Job Order Memorandum',
+        'JOM',
     ];
 
     /**

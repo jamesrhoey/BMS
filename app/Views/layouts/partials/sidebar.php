@@ -73,139 +73,89 @@ $userInitial = strtoupper((string) substr($userFullName !== '' ? $userFullName :
             }
             $mktCurrentStatus = (string) ($mktQueryParsed['status'] ?? ($_GET['status'] ?? ''));
             $mktCurrentCompleteness = (string) ($mktQueryParsed['completeness'] ?? ($_GET['completeness'] ?? ''));
+            $mktCurrentView = (string) ($mktQueryParsed['view'] ?? ($_GET['view'] ?? ''));
             $mktActiveNav = (string) ($activeNav ?? '');
 
-            // 1. Project Management Submenu
-            $isMktRegActive = ($mktActiveNav === 'projects_create');
-            $isMktAllActive = ($mktActiveNav === 'projects');
-            $isMktMyActive = ($mktActiveNav === 'marketing_projects') && $mktCurrentStatus === '' && $mktCurrentCompleteness === '';
-            $isMktPmGroupActive = $isMktRegActive || $isMktMyActive || $isMktAllActive;
+            $isMktDashActive = ($mktActiveNav === 'marketing_dashboard');
+            $isMktCreateActive = ($mktActiveNav === 'projects_create');
+            $isMktDraftActive = ($mktActiveNav === 'marketing_projects' && $mktCurrentStatus === 'draft');
+            $isMktReturnedActive = ($mktActiveNav === 'marketing_projects' && in_array($mktCurrentStatus, ['returned', 'Returned for Corrections', 'Returned to Marketing for Corrections', 'Returned to Marketing'], true));
+            $isMktSubmittedActive = ($mktActiveNav === 'marketing_projects' && in_array($mktCurrentStatus, ['submitted', 'submitted_queue', 'pm_queue', 'Submitted to Project Management and Admin Finance', 'Resubmitted to Project Management and Admin Finance'], true));
+            $isMktDocsActive = ($mktActiveNav === 'marketing_projects' && ($mktCurrentView === 'documents' || $mktCurrentCompleteness !== ''));
+            $isMktAllActive = ($mktActiveNav === 'marketing_projects' && !$isMktDraftActive && !$isMktReturnedActive && !$isMktSubmittedActive && !$isMktDocsActive);
 
-            // 2. Document Management Submenu
-            $isMktReqDocsActive = ($mktActiveNav === 'marketing_projects') && ($mktCurrentCompleteness === 'incomplete');
-            $isMktSubDocsActive = ($mktActiveNav === 'marketing_projects') && ($mktCurrentCompleteness === 'complete');
-            $isMktDocsGroupActive = $isMktReqDocsActive || $isMktSubDocsActive;
-
-            // 3. Project Tracking Submenu
-            $isMktPendingActive = ($mktActiveNav === 'marketing_projects') && ($mktCurrentStatus === 'pm_queue');
-            $isMktReturnedActive = ($mktActiveNav === 'marketing_projects') && ($mktCurrentStatus === 'Returned for Corrections');
-            $isMktApprovedActive = ($mktActiveNav === 'marketing_projects') && ($mktCurrentStatus === 'Approved by Project Management');
-            $isMktForwardedActive = ($mktActiveNav === 'marketing_projects') && in_array($mktCurrentStatus, ['Forwarded to Admin Finance', 'Forwarded to Operations'], true);
-            $isMktTrackingGroupActive = $isMktPendingActive || $isMktReturnedActive || $isMktApprovedActive || $isMktForwardedActive;
-
-            $canViewAllProjects = !empty($isAdmin) || \App\Services\AuthorizationService::hasPermission($currentUser ?? null, 'projects.view_all');
+            $isMarketingGroupOpen = $isMktDashActive || $isMktCreateActive || $isMktDraftActive || $isMktReturnedActive || $isMktSubmittedActive || $isMktDocsActive || $isMktAllActive || str_starts_with($mktActiveNav, 'marketing_');
             ?>
 
-            <!-- DASHBOARD -->
-            <a href="<?= url('/marketing/dashboard') ?>"
-               class="bms-nav-link <?= ($activeNav ?? '') === 'marketing_dashboard' ? 'active' : '' ?>"
-               title="Dashboard">
-                <span class="bms-nav-icon" aria-hidden="true"><?= bms_icon('dashboard', 18) ?></span>
-                <span class="bms-nav-label">Dashboard</span>
-            </a>
-
-            <!-- PROJECT MANAGEMENT (Dropdown) -->
-            <div class="bms-nav-group <?= $isMktPmGroupActive ? 'open' : '' ?>" data-nav-group="marketing-pm">
+            <!-- MARKETING DROPDOWN (Expandable/Collapsible) -->
+            <div class="bms-nav-group <?= $isMarketingGroupOpen ? 'open' : '' ?>" data-nav-group="marketing-main">
                 <button type="button"
-                        class="bms-nav-dropdown-toggle <?= $isMktPmGroupActive ? 'active-parent' : '' ?>"
-                        data-nav-toggle="marketing-pm"
-                        aria-expanded="<?= $isMktPmGroupActive ? 'true' : 'false' ?>"
-                        aria-controls="nav-group-marketing-pm"
-                        title="Project Management">
+                        class="bms-nav-dropdown-toggle <?= $isMarketingGroupOpen ? 'active-parent' : '' ?>"
+                        data-nav-toggle="marketing-main"
+                        aria-expanded="<?= $isMarketingGroupOpen ? 'true' : 'false' ?>"
+                        aria-controls="nav-group-marketing-main"
+                        title="Marketing">
                     <span class="bms-nav-icon" aria-hidden="true"><?= bms_icon('folder', 18) ?></span>
-                    <span class="bms-nav-label">Project Management</span>
+                    <span class="bms-nav-label">Marketing</span>
                     <span class="bms-nav-chevron" aria-hidden="true"><?= bms_icon('chevron-down', 14) ?></span>
                 </button>
-                <div class="bms-subnav-menu" id="nav-group-marketing-pm" role="region" aria-label="Project Management Submenu">
+                <div class="bms-subnav-menu" id="nav-group-marketing-main" role="region" aria-label="Marketing Submenu">
+                    <!-- Dashboard -->
+                    <a href="<?= url('/marketing/dashboard') ?>"
+                       class="bms-subnav-link <?= $isMktDashActive ? 'active' : '' ?>"
+                       title="Dashboard">
+                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
+                        <span class="bms-nav-label">Dashboard</span>
+                    </a>
+
+                    <!-- Create Project -->
                     <?php if (!empty($canRegisterProject)): ?>
                         <a href="<?= url('/marketing/projects/create') ?>"
-                           class="bms-subnav-link <?= $isMktRegActive ? 'active' : '' ?>"
-                           title="Project Registration">
+                           class="bms-subnav-link <?= $isMktCreateActive ? 'active' : '' ?>"
+                           title="Create Project">
                             <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                            <span class="bms-nav-label">Project Registration</span>
+                            <span class="bms-nav-label">Create Project</span>
                         </a>
                     <?php endif; ?>
+
+                    <!-- All Projects -->
                     <a href="<?= url('/marketing/projects') ?>"
-                       class="bms-subnav-link <?= $isMktMyActive ? 'active' : '' ?>"
-                       title="My Projects">
+                       class="bms-subnav-link <?= $isMktAllActive ? 'active' : '' ?>"
+                       title="All Projects">
                         <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">My Projects</span>
+                        <span class="bms-nav-label">All Projects</span>
                     </a>
-                    <?php if ($canViewAllProjects): ?>
-                        <a href="<?= url('/projects') ?>"
-                           class="bms-subnav-link <?= $isMktAllActive ? 'active' : '' ?>"
-                           title="All Projects">
-                            <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                            <span class="bms-nav-label">All Projects</span>
-                        </a>
-                    <?php endif; ?>
-                </div>
-            </div>
 
-            <!-- DOCUMENT MANAGEMENT (Dropdown) -->
-            <div class="bms-nav-group <?= $isMktDocsGroupActive ? 'open' : '' ?>" data-nav-group="marketing-docs">
-                <button type="button"
-                        class="bms-nav-dropdown-toggle <?= $isMktDocsGroupActive ? 'active-parent' : '' ?>"
-                        data-nav-toggle="marketing-docs"
-                        aria-expanded="<?= $isMktDocsGroupActive ? 'true' : 'false' ?>"
-                        aria-controls="nav-group-marketing-docs"
-                        title="Document Management">
-                    <span class="bms-nav-icon" aria-hidden="true"><?= bms_icon('file-text', 18) ?></span>
-                    <span class="bms-nav-label">Document Management</span>
-                    <span class="bms-nav-chevron" aria-hidden="true"><?= bms_icon('chevron-down', 14) ?></span>
-                </button>
-                <div class="bms-subnav-menu" id="nav-group-marketing-docs" role="region" aria-label="Document Management Submenu">
-                    <a href="<?= url('/marketing/projects?completeness=incomplete') ?>"
-                       class="bms-subnav-link <?= $isMktReqDocsActive ? 'active' : '' ?>"
-                       title="Required Project Documents">
+                    <!-- Draft Projects -->
+                    <a href="<?= url('/marketing/projects?status=draft') ?>"
+                       class="bms-subnav-link <?= $isMktDraftActive ? 'active' : '' ?>"
+                       title="Draft Projects">
                         <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Required Project Documents</span>
+                        <span class="bms-nav-label">Draft Projects</span>
                     </a>
-                    <a href="<?= url('/marketing/projects?completeness=complete') ?>"
-                       class="bms-subnav-link <?= $isMktSubDocsActive ? 'active' : '' ?>"
-                       title="Submitted Documents">
-                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Submitted Documents</span>
-                    </a>
-                </div>
-            </div>
 
-            <!-- PROJECT TRACKING (Dropdown) -->
-            <div class="bms-nav-group <?= $isMktTrackingGroupActive ? 'open' : '' ?>" data-nav-group="marketing-tracking">
-                <button type="button"
-                        class="bms-nav-dropdown-toggle <?= $isMktTrackingGroupActive ? 'active-parent' : '' ?>"
-                        data-nav-toggle="marketing-tracking"
-                        aria-expanded="<?= $isMktTrackingGroupActive ? 'true' : 'false' ?>"
-                        aria-controls="nav-group-marketing-tracking"
-                        title="Project Tracking">
-                    <span class="bms-nav-icon" aria-hidden="true"><?= bms_icon('activity', 18) ?></span>
-                    <span class="bms-nav-label">Project Tracking</span>
-                    <span class="bms-nav-chevron" aria-hidden="true"><?= bms_icon('chevron-down', 14) ?></span>
-                </button>
-                <div class="bms-subnav-menu" id="nav-group-marketing-tracking" role="region" aria-label="Project Tracking Submenu">
-                    <a href="<?= url('/marketing/projects?status=pm_queue') ?>"
-                       class="bms-subnav-link <?= $isMktPendingActive ? 'active' : '' ?>"
-                       title="Pending Reviews">
-                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Pending Reviews</span>
-                    </a>
-                    <a href="<?= url('/marketing/projects?status=' . urlencode('Returned for Corrections')) ?>"
+                    <!-- Returned Projects -->
+                    <a href="<?= url('/marketing/projects?status=returned') ?>"
                        class="bms-subnav-link <?= $isMktReturnedActive ? 'active' : '' ?>"
                        title="Returned Projects">
                         <span class="bms-subnav-bullet" aria-hidden="true"></span>
                         <span class="bms-nav-label">Returned Projects</span>
                     </a>
-                    <a href="<?= url('/marketing/projects?status=' . urlencode('Approved by Project Management')) ?>"
-                       class="bms-subnav-link <?= $isMktApprovedActive ? 'active' : '' ?>"
-                       title="Approved Projects">
+
+                    <!-- Submitted Projects -->
+                    <a href="<?= url('/marketing/projects?status=submitted_queue') ?>"
+                       class="bms-subnav-link <?= $isMktSubmittedActive ? 'active' : '' ?>"
+                       title="Submitted Projects">
                         <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Approved Projects</span>
+                        <span class="bms-nav-label">Submitted Projects</span>
                     </a>
-                    <a href="<?= url('/marketing/projects?status=' . urlencode('Forwarded to Admin Finance')) ?>"
-                       class="bms-subnav-link <?= $isMktForwardedActive ? 'active' : '' ?>"
-                       title="Forwarded Projects">
+
+                    <!-- Project Documents -->
+                    <a href="<?= url('/marketing/projects?view=documents') ?>"
+                       class="bms-subnav-link <?= $isMktDocsActive ? 'active' : '' ?>"
+                       title="Project Documents">
                         <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Forwarded Projects</span>
+                        <span class="bms-nav-label">Project Documents</span>
                     </a>
                 </div>
             </div>
@@ -220,172 +170,85 @@ $userInitial = strtoupper((string) substr($userFullName !== '' ? $userFullName :
             $pmCurrentStatus = (string) ($pmQueryParsed['status'] ?? ($_GET['status'] ?? ''));
             $pmActiveNav = (string) ($activeNav ?? '');
 
-            // 1. Dashboard Active State
+            // Active state resolution
             $isPmDashActive = in_array($pmActiveNav, ['pm_dashboard', 'dashboard', 'dashboard_dept'], true);
-
-            // 2. Project Intake Submenu
-            $isPmIncomingActive = ($pmActiveNav === 'pm_projects') && in_array($pmCurrentStatus, ['pending', 'awaiting'], true);
-            $isPmAllReceivedActive = ($pmActiveNav === 'pm_projects') && $pmCurrentStatus === '';
-            $isPmIntakeGroupActive = $isPmIncomingActive || $isPmAllReceivedActive;
-
-            // 3. Document Verification Submenu
-            $isPmDocQueueActive = ($pmActiveNav === 'pm_projects') && in_array($pmCurrentStatus, ['verification_queue', 'pm_queue'], true);
-            $isPmDocResubActive = ($pmActiveNav === 'pm_projects') && ($pmCurrentStatus === 'resubmitted');
-            $isPmVerificationGroupActive = $isPmDocQueueActive || $isPmDocResubActive;
-
-            // 4. Project Review Submenu
-            $isPmUnderReviewActive = ($pmActiveNav === 'pm_projects') && ($pmCurrentStatus === 'under_review' || $pmCurrentStatus === 'Under Review');
+            $isPmIncomingActive = ($pmActiveNav === 'pm_projects') && in_array($pmCurrentStatus, ['incoming', 'pending', 'awaiting'], true);
+            $isPmDocActive = ($pmActiveNav === 'pm_projects' && in_array($pmCurrentStatus, ['verification', 'verification_queue', 'pm_queue', 'resubmitted'], true)) || $pmActiveNav === 'pm_verification';
             $isPmReturnedActive = ($pmActiveNav === 'pm_projects') && in_array($pmCurrentStatus, ['returned', 'Returned for Corrections', 'Returned to Marketing for Corrections'], true);
-            $isPmReviewGroupActive = $isPmUnderReviewActive || $isPmReturnedActive;
-
-            // 5. Project Approval Submenu
             $isPmApprovedActive = ($pmActiveNav === 'pm_projects') && in_array($pmCurrentStatus, ['approved', 'completed', 'verified', 'Approved by Project Management'], true);
-            $isPmApprovalGroupActive = $isPmApprovedActive;
+            $isPmForwardedOpsActive = ($pmActiveNav === 'pm_projects') && in_array($pmCurrentStatus, ['forwarded_to_ops', 'forwarded_ops', 'Forwarded to OPS', 'forwarded_to_operations'], true);
+            $isPmHistoryActive = ($pmActiveNav === 'pm_verification_history') || ($pmActiveNav === 'pm_projects' && $pmCurrentStatus === 'history');
 
-            // 6. Project Forwarding Submenu
-            $isPmReadyForwardActive = ($pmActiveNav === 'pm_projects') && in_array($pmCurrentStatus, ['ready_for_admin_finance', 'ready_forward'], true);
-            $isPmForwardedActive = ($pmActiveNav === 'pm_projects') && in_array($pmCurrentStatus, ['forwarded_to_admin_finance', 'forwarded', 'Forwarded to Admin Finance'], true);
-            $isPmForwardingGroupActive = $isPmReadyForwardActive || $isPmForwardedActive;
+            $isPmGroupOpen = $isPmDashActive || $isPmIncomingActive || $isPmDocActive || $isPmReturnedActive || $isPmApprovedActive || $isPmForwardedOpsActive || $isPmHistoryActive || str_starts_with($pmActiveNav, 'pm_');
             ?>
 
-            <!-- DASHBOARD -->
-            <a href="<?= url('/pm/dashboard') ?>"
-               class="bms-nav-link <?= $isPmDashActive ? 'active' : '' ?>"
-               title="Project Management Dashboard">
-                <span class="bms-nav-icon" aria-hidden="true"><?= bms_icon('dashboard', 18) ?></span>
-                <span class="bms-nav-label">Project Management Dashboard</span>
-            </a>
-
-            <!-- PROJECT INTAKE (Dropdown) -->
-            <div class="bms-nav-group <?= $isPmIntakeGroupActive ? 'open' : '' ?>" data-nav-group="pm-intake">
+            <!-- PROJECT MANAGEMENT DROPDOWN (Expandable/Collapsible) -->
+            <div class="bms-nav-group <?= $isPmGroupOpen ? 'open' : '' ?>" data-nav-group="pm-main">
                 <button type="button"
-                        class="bms-nav-dropdown-toggle <?= $isPmIntakeGroupActive ? 'active-parent' : '' ?>"
-                        data-nav-toggle="pm-intake"
-                        aria-expanded="<?= $isPmIntakeGroupActive ? 'true' : 'false' ?>"
-                        aria-controls="nav-group-pm-intake"
-                        title="Project Intake">
-                    <span class="bms-nav-icon" aria-hidden="true"><?= bms_icon('inbox', 18) ?></span>
-                    <span class="bms-nav-label">Project Intake</span>
+                        class="bms-nav-dropdown-toggle <?= $isPmGroupOpen ? 'active-parent' : '' ?>"
+                        data-nav-toggle="pm-main"
+                        aria-expanded="<?= $isPmGroupOpen ? 'true' : 'false' ?>"
+                        aria-controls="nav-group-pm-main"
+                        title="Project Management">
+                    <span class="bms-nav-icon" aria-hidden="true"><?= bms_icon('folder', 18) ?></span>
+                    <span class="bms-nav-label">Project Management</span>
                     <span class="bms-nav-chevron" aria-hidden="true"><?= bms_icon('chevron-down', 14) ?></span>
                 </button>
-                <div class="bms-subnav-menu" id="nav-group-pm-intake" role="region" aria-label="Project Intake Submenu">
-                    <a href="<?= url('/pm/projects?status=pending') ?>"
+                <div class="bms-subnav-menu" id="nav-group-pm-main" role="region" aria-label="Project Management Submenu">
+                    <!-- Dashboard -->
+                    <a href="<?= url('/pm/dashboard') ?>"
+                       class="bms-subnav-link <?= $isPmDashActive ? 'active' : '' ?>"
+                       title="Dashboard">
+                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
+                        <span class="bms-nav-label">Dashboard</span>
+                    </a>
+
+                    <!-- Incoming Projects -->
+                    <a href="<?= url('/pm/projects?status=incoming') ?>"
                        class="bms-subnav-link <?= $isPmIncomingActive ? 'active' : '' ?>"
                        title="Incoming Projects">
                         <span class="bms-subnav-bullet" aria-hidden="true"></span>
                         <span class="bms-nav-label">Incoming Projects</span>
                     </a>
-                    <a href="<?= url('/pm/projects') ?>"
-                       class="bms-subnav-link <?= $isPmAllReceivedActive ? 'active' : '' ?>"
-                       title="All Received Projects">
-                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">All Received Projects</span>
-                    </a>
-                </div>
-            </div>
 
-            <!-- DOCUMENT VERIFICATION (Dropdown) -->
-            <div class="bms-nav-group <?= $isPmVerificationGroupActive ? 'open' : '' ?>" data-nav-group="pm-verification">
-                <button type="button"
-                        class="bms-nav-dropdown-toggle <?= $isPmVerificationGroupActive ? 'active-parent' : '' ?>"
-                        data-nav-toggle="pm-verification"
-                        aria-expanded="<?= $isPmVerificationGroupActive ? 'true' : 'false' ?>"
-                        aria-controls="nav-group-pm-verification"
-                        title="Document Verification">
-                    <span class="bms-nav-icon" aria-hidden="true"><?= bms_icon('file-check', 18) ?></span>
-                    <span class="bms-nav-label">Document Verification</span>
-                    <span class="bms-nav-chevron" aria-hidden="true"><?= bms_icon('chevron-down', 14) ?></span>
-                </button>
-                <div class="bms-subnav-menu" id="nav-group-pm-verification" role="region" aria-label="Document Verification Submenu">
-                    <a href="<?= url('/pm/projects?status=verification_queue') ?>"
-                       class="bms-subnav-link <?= $isPmDocQueueActive ? 'active' : '' ?>"
-                       title="Document Verification Queue">
+                    <!-- Document Verification -->
+                    <a href="<?= url('/pm/projects?status=verification') ?>"
+                       class="bms-subnav-link <?= $isPmDocActive ? 'active' : '' ?>"
+                       title="Document Verification">
                         <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Document Verification Queue</span>
+                        <span class="bms-nav-label">Document Verification</span>
                     </a>
-                    <a href="<?= url('/pm/projects?status=resubmitted') ?>"
-                       class="bms-subnav-link <?= $isPmDocResubActive ? 'active' : '' ?>"
-                       title="Resubmitted Documents">
-                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Resubmitted Documents</span>
-                    </a>
-                </div>
-            </div>
 
-            <!-- PROJECT REVIEW (Dropdown) -->
-            <div class="bms-nav-group <?= $isPmReviewGroupActive ? 'open' : '' ?>" data-nav-group="pm-review">
-                <button type="button"
-                        class="bms-nav-dropdown-toggle <?= $isPmReviewGroupActive ? 'active-parent' : '' ?>"
-                        data-nav-toggle="pm-review"
-                        aria-expanded="<?= $isPmReviewGroupActive ? 'true' : 'false' ?>"
-                        aria-controls="nav-group-pm-review"
-                        title="Project Review">
-                    <span class="bms-nav-icon" aria-hidden="true"><?= bms_icon('review', 18) ?></span>
-                    <span class="bms-nav-label">Project Review</span>
-                    <span class="bms-nav-chevron" aria-hidden="true"><?= bms_icon('chevron-down', 14) ?></span>
-                </button>
-                <div class="bms-subnav-menu" id="nav-group-pm-review" role="region" aria-label="Project Review Submenu">
-                    <a href="<?= url('/pm/projects?status=under_review') ?>"
-                       class="bms-subnav-link <?= $isPmUnderReviewActive ? 'active' : '' ?>"
-                       title="Projects Under Review">
-                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Projects Under Review</span>
-                    </a>
+                    <!-- Returned Projects -->
                     <a href="<?= url('/pm/projects?status=returned') ?>"
                        class="bms-subnav-link <?= $isPmReturnedActive ? 'active' : '' ?>"
                        title="Returned Projects">
                         <span class="bms-subnav-bullet" aria-hidden="true"></span>
                         <span class="bms-nav-label">Returned Projects</span>
                     </a>
-                </div>
-            </div>
 
-            <!-- PROJECT APPROVAL (Dropdown) -->
-            <div class="bms-nav-group <?= $isPmApprovalGroupActive ? 'open' : '' ?>" data-nav-group="pm-approval">
-                <button type="button"
-                        class="bms-nav-dropdown-toggle <?= $isPmApprovalGroupActive ? 'active-parent' : '' ?>"
-                        data-nav-toggle="pm-approval"
-                        aria-expanded="<?= $isPmApprovalGroupActive ? 'true' : 'false' ?>"
-                        aria-controls="nav-group-pm-approval"
-                        title="Project Approval">
-                    <span class="bms-nav-icon" aria-hidden="true"><?= bms_icon('check-circle', 18) ?></span>
-                    <span class="bms-nav-label">Project Approval</span>
-                    <span class="bms-nav-chevron" aria-hidden="true"><?= bms_icon('chevron-down', 14) ?></span>
-                </button>
-                <div class="bms-subnav-menu" id="nav-group-pm-approval" role="region" aria-label="Project Approval Submenu">
+                    <!-- Approved Projects -->
                     <a href="<?= url('/pm/projects?status=approved') ?>"
                        class="bms-subnav-link <?= $isPmApprovedActive ? 'active' : '' ?>"
                        title="Approved Projects">
                         <span class="bms-subnav-bullet" aria-hidden="true"></span>
                         <span class="bms-nav-label">Approved Projects</span>
                     </a>
-                </div>
-            </div>
 
-            <!-- PROJECT FORWARDING (Dropdown) -->
-            <div class="bms-nav-group <?= $isPmForwardingGroupActive ? 'open' : '' ?>" data-nav-group="pm-forwarding">
-                <button type="button"
-                        class="bms-nav-dropdown-toggle <?= $isPmForwardingGroupActive ? 'active-parent' : '' ?>"
-                        data-nav-toggle="pm-forwarding"
-                        aria-expanded="<?= $isPmForwardingGroupActive ? 'true' : 'false' ?>"
-                        aria-controls="nav-group-pm-forwarding"
-                        title="Project Forwarding">
-                    <span class="bms-nav-icon" aria-hidden="true"><?= bms_icon('send', 18) ?></span>
-                    <span class="bms-nav-label">Project Forwarding</span>
-                    <span class="bms-nav-chevron" aria-hidden="true"><?= bms_icon('chevron-down', 14) ?></span>
-                </button>
-                <div class="bms-subnav-menu" id="nav-group-pm-forwarding" role="region" aria-label="Project Forwarding Submenu">
-                    <a href="<?= url('/pm/projects?status=ready_for_admin_finance') ?>"
-                       class="bms-subnav-link <?= $isPmReadyForwardActive ? 'active' : '' ?>"
-                       title="Ready for Admin Finance">
+                    <!-- Forwarded to OPS -->
+                    <a href="<?= url('/pm/projects?status=forwarded_to_ops') ?>"
+                       class="bms-subnav-link <?= $isPmForwardedOpsActive ? 'active' : '' ?>"
+                       title="Forwarded to OPS">
                         <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Ready for Admin Finance</span>
+                        <span class="bms-nav-label">Forwarded to OPS</span>
                     </a>
-                    <a href="<?= url('/pm/projects?status=forwarded_to_admin_finance') ?>"
-                       class="bms-subnav-link <?= $isPmForwardedActive ? 'active' : '' ?>"
-                       title="Forwarded to Admin Finance">
+
+                    <!-- Verification History -->
+                    <a href="<?= url('/pm/verification-history') ?>"
+                       class="bms-subnav-link <?= $isPmHistoryActive ? 'active' : '' ?>"
+                       title="Verification History">
                         <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Forwarded to Admin Finance</span>
+                        <span class="bms-nav-label">Verification History</span>
                     </a>
                 </div>
             </div>
@@ -599,141 +462,95 @@ $userInitial = strtoupper((string) substr($userFullName !== '' ? $userFullName :
             </div>
         <?php elseif (!empty($isOperationsUser)): ?>
             <?php
-            // Resolve current operations filter states for deep-linking & auto-expansion
-            $opsQueryStr = (string) ($_SERVER['QUERY_STRING'] ?? '');
+            // Operations Department Submenu & Dropdown Active State Resolution
+            $opsQueryStr = (string) (parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_QUERY) ?? '');
             $opsQueryParsed = [];
-            parse_str($opsQueryStr, $opsQueryParsed);
+            if ($opsQueryStr !== '') {
+                parse_str($opsQueryStr, $opsQueryParsed);
+            }
             $opsCurrentStatus = (string) ($opsQueryParsed['status'] ?? ($_GET['status'] ?? ''));
+            $opsCurrentCategory = (string) ($opsQueryParsed['category'] ?? ($_GET['category'] ?? ''));
             $opsActiveNav = (string) ($activeNav ?? '');
 
-            // 1. Dashboard Active State
+            // Active state resolution
             $isOpsDashActive = in_array($opsActiveNav, ['ops_dashboard', 'dashboard', 'dashboard_dept'], true);
+            $isOpsIncomingActive = ($opsActiveNav === 'ops_projects') && in_array($opsCurrentStatus, ['incoming', 'pending', 'received'], true);
+            $isOpsMrcActive = ($opsActiveNav === 'ops_projects') && strtolower($opsCurrentCategory) === 'mrc';
+            $isOpsSpecialActive = ($opsActiveNav === 'ops_projects') && in_array(strtolower($opsCurrentCategory), ['special_project', 'special project'], true);
+            $isOpsDocsActive = ($opsActiveNav === 'ops_projects') && in_array($opsCurrentStatus, ['documents_complete', 'complete', 'docs'], true);
+            $isOpsSubmittedActive = ($opsActiveNav === 'ops_projects') && in_array($opsCurrentStatus, ['submitted_opfin', 'submitted_to_ops_finance', 'submitted'], true);
+            $isOpsHistoryActive = ($opsActiveNav === 'ops_history') || ($opsActiveNav === 'ops_projects' && $opsCurrentStatus === 'history');
 
-            // 2. Project Management Submenu
-            $isOpsReceivedActive = ($opsActiveNav === 'ops_projects') && ($opsCurrentStatus === 'awaiting_pr');
-            $isOpsAllProjectsActive = ($opsActiveNav === 'ops_projects') && ($opsCurrentStatus === '');
-            $isOpsPmGroupActive = $isOpsReceivedActive || $isOpsAllProjectsActive;
-
-            // 3. Purchase Request Management Submenu
-            $isOpsPrDraftActive = ($opsActiveNav === 'ops_projects') && in_array($opsCurrentStatus, ['draft', 'preparing_pr'], true);
-            $isOpsPrPendingActive = ($opsActiveNav === 'ops_projects') && in_array($opsCurrentStatus, ['pending', 'submitted_pr'], true);
-            $isOpsPrApprovedActive = ($opsActiveNav === 'ops_projects') && ($opsCurrentStatus === 'approved');
-            $isOpsPrReturnedActive = ($opsActiveNav === 'ops_projects') && ($opsCurrentStatus === 'returned');
-            $isOpsPrRejectedActive = ($opsActiveNav === 'ops_projects') && ($opsCurrentStatus === 'rejected');
-            $isOpsPrGroupActive = $isOpsPrDraftActive || $isOpsPrPendingActive || $isOpsPrApprovedActive || $isOpsPrReturnedActive || $isOpsPrRejectedActive;
-
-            // 4. Purchasing Tracking Submenu
-            $isOpsConvertedPoActive = ($opsActiveNav === 'ops_projects') && ($opsCurrentStatus === 'converted_po');
-            $isOpsAwaitingPurchasingActive = ($opsActiveNav === 'ops_projects') && ($opsCurrentStatus === 'awaiting_purchasing');
-            $isOpsPurchasingGroupActive = $isOpsConvertedPoActive || $isOpsAwaitingPurchasingActive;
+            $isOpsGroupOpen = $isOpsDashActive || $isOpsIncomingActive || $isOpsMrcActive || $isOpsSpecialActive || $isOpsDocsActive || $isOpsSubmittedActive || $isOpsHistoryActive || str_starts_with($opsActiveNav, 'ops_');
             ?>
 
-            <!-- DASHBOARD -->
-            <a href="<?= url('/operations/dashboard') ?>"
-               class="bms-nav-link <?= $isOpsDashActive ? 'active' : '' ?>"
-               title="Operations Dashboard">
-                <span class="bms-nav-icon" aria-hidden="true"><?= bms_icon('dashboard', 18) ?></span>
-                <span class="bms-nav-label">Operations Dashboard</span>
-            </a>
-
-            <!-- PROJECT MANAGEMENT (Dropdown) -->
-            <div class="bms-nav-group <?= $isOpsPmGroupActive ? 'open' : '' ?>" data-nav-group="ops-pm">
+            <!-- OPS (OPERATIONS) DROPDOWN (Expandable/Collapsible) -->
+            <div class="bms-nav-group <?= $isOpsGroupOpen ? 'open' : '' ?>" data-nav-group="ops-main">
                 <button type="button"
-                        class="bms-nav-dropdown-toggle <?= $isOpsPmGroupActive ? 'active-parent' : '' ?>"
-                        data-nav-toggle="ops-pm"
-                        aria-expanded="<?= $isOpsPmGroupActive ? 'true' : 'false' ?>"
-                        aria-controls="nav-group-ops-pm"
-                        title="Project Management">
-                    <span class="bms-nav-icon" aria-hidden="true"><?= bms_icon('folder', 18) ?></span>
-                    <span class="bms-nav-label">Project Management</span>
-                    <span class="bms-nav-chevron" aria-hidden="true"><?= bms_icon('chevron-down', 14) ?></span>
-                </button>
-                <div class="bms-subnav-menu" id="nav-group-ops-pm" role="region" aria-label="Project Management Submenu">
-                    <a href="<?= url('/operations/projects?status=awaiting_pr') ?>"
-                       class="bms-subnav-link <?= $isOpsReceivedActive ? 'active' : '' ?>"
-                       title="Received Projects">
-                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Received Projects</span>
-                    </a>
-                    <a href="<?= url('/operations/projects') ?>"
-                       class="bms-subnav-link <?= $isOpsAllProjectsActive ? 'active' : '' ?>"
-                       title="All Operations Projects">
-                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">All Operations Projects</span>
-                    </a>
-                </div>
-            </div>
-
-            <!-- PURCHASE REQUEST MANAGEMENT (Dropdown) -->
-            <div class="bms-nav-group <?= $isOpsPrGroupActive ? 'open' : '' ?>" data-nav-group="ops-pr">
-                <button type="button"
-                        class="bms-nav-dropdown-toggle <?= $isOpsPrGroupActive ? 'active-parent' : '' ?>"
-                        data-nav-toggle="ops-pr"
-                        aria-expanded="<?= $isOpsPrGroupActive ? 'true' : 'false' ?>"
-                        aria-controls="nav-group-ops-pr"
-                        title="Purchase Request Management">
-                    <span class="bms-nav-icon" aria-hidden="true"><?= bms_icon('file-text', 18) ?></span>
-                    <span class="bms-nav-label">Purchase Request Management</span>
-                    <span class="bms-nav-chevron" aria-hidden="true"><?= bms_icon('chevron-down', 14) ?></span>
-                </button>
-                <div class="bms-subnav-menu" id="nav-group-ops-pr" role="region" aria-label="Purchase Request Management Submenu">
-                    <a href="<?= url('/operations/projects?status=draft') ?>"
-                       class="bms-subnav-link <?= $isOpsPrDraftActive ? 'active' : '' ?>"
-                       title="Draft Purchase Requests">
-                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Draft Purchase Requests</span>
-                    </a>
-                    <a href="<?= url('/operations/projects?status=pending') ?>"
-                       class="bms-subnav-link <?= $isOpsPrPendingActive ? 'active' : '' ?>"
-                       title="Submitted / Pending PRs">
-                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Submitted / Pending PRs</span>
-                    </a>
-                    <a href="<?= url('/operations/projects?status=approved') ?>"
-                       class="bms-subnav-link <?= $isOpsPrApprovedActive ? 'active' : '' ?>"
-                       title="Approved PRs">
-                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Approved PRs</span>
-                    </a>
-                    <a href="<?= url('/operations/projects?status=returned') ?>"
-                       class="bms-subnav-link <?= $isOpsPrReturnedActive ? 'active' : '' ?>"
-                       title="Returned PRs">
-                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Returned PRs</span>
-                    </a>
-                    <a href="<?= url('/operations/projects?status=rejected') ?>"
-                       class="bms-subnav-link <?= $isOpsPrRejectedActive ? 'active' : '' ?>"
-                       title="Rejected PRs">
-                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Rejected PRs</span>
-                    </a>
-                </div>
-            </div>
-
-            <!-- PURCHASING TRACKING (Dropdown) -->
-            <div class="bms-nav-group <?= $isOpsPurchasingGroupActive ? 'open' : '' ?>" data-nav-group="ops-purchasing">
-                <button type="button"
-                        class="bms-nav-dropdown-toggle <?= $isOpsPurchasingGroupActive ? 'active-parent' : '' ?>"
-                        data-nav-toggle="ops-purchasing"
-                        aria-expanded="<?= $isOpsPurchasingGroupActive ? 'true' : 'false' ?>"
-                        aria-controls="nav-group-ops-purchasing"
-                        title="Purchasing Tracking">
+                        class="bms-nav-dropdown-toggle <?= $isOpsGroupOpen ? 'active-parent' : '' ?>"
+                        data-nav-toggle="ops-main"
+                        aria-expanded="<?= $isOpsGroupOpen ? 'true' : 'false' ?>"
+                        aria-controls="nav-group-ops-main"
+                        title="OPS (Operations)">
                     <span class="bms-nav-icon" aria-hidden="true"><?= bms_icon('briefcase', 18) ?></span>
-                    <span class="bms-nav-label">Purchasing Tracking</span>
+                    <span class="bms-nav-label">OPS (Operations)</span>
                     <span class="bms-nav-chevron" aria-hidden="true"><?= bms_icon('chevron-down', 14) ?></span>
                 </button>
-                <div class="bms-subnav-menu" id="nav-group-ops-purchasing" role="region" aria-label="Purchasing Tracking Submenu">
-                    <a href="<?= url('/operations/projects?status=converted_po') ?>"
-                       class="bms-subnav-link <?= $isOpsConvertedPoActive ? 'active' : '' ?>"
-                       title="Purchase Order Tracking">
+                <div class="bms-subnav-menu" id="nav-group-ops-main" role="region" aria-label="Operations Submenu">
+                    <!-- Dashboard -->
+                    <a href="<?= url('/operations/dashboard') ?>"
+                       class="bms-subnav-link <?= $isOpsDashActive ? 'active' : '' ?>"
+                       title="Dashboard">
                         <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Purchase Order Tracking</span>
+                        <span class="bms-nav-label">Dashboard</span>
                     </a>
-                    <a href="<?= url('/operations/projects?status=awaiting_purchasing') ?>"
-                       class="bms-subnav-link <?= $isOpsAwaitingPurchasingActive ? 'active' : '' ?>"
-                       title="Awaiting Purchasing">
+
+                    <!-- Incoming Projects -->
+                    <a href="<?= url('/operations/projects?status=incoming') ?>"
+                       class="bms-subnav-link <?= $isOpsIncomingActive ? 'active' : '' ?>"
+                       title="Incoming Projects">
                         <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Awaiting Purchasing</span>
+                        <span class="bms-nav-label">Incoming Projects</span>
+                    </a>
+
+                    <!-- MRC Projects -->
+                    <a href="<?= url('/operations/projects?category=mrc') ?>"
+                       class="bms-subnav-link <?= $isOpsMrcActive ? 'active' : '' ?>"
+                       title="MRC Projects">
+                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
+                        <span class="bms-nav-label">MRC Projects</span>
+                    </a>
+
+                    <!-- Special Projects -->
+                    <a href="<?= url('/operations/projects?category=special_project') ?>"
+                       class="bms-subnav-link <?= $isOpsSpecialActive ? 'active' : '' ?>"
+                       title="Special Projects">
+                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
+                        <span class="bms-nav-label">Special Projects</span>
+                    </a>
+
+                    <!-- Project Documents -->
+                    <a href="<?= url('/operations/projects?status=documents_complete') ?>"
+                       class="bms-subnav-link <?= $isOpsDocsActive ? 'active' : '' ?>"
+                       title="Project Documents">
+                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
+                        <span class="bms-nav-label">Project Documents</span>
+                    </a>
+
+                    <!-- Submitted to OPS Finance -->
+                    <a href="<?= url('/operations/projects?status=submitted_opfin') ?>"
+                       class="bms-subnav-link <?= $isOpsSubmittedActive ? 'active' : '' ?>"
+                       title="Submitted to OPS Finance">
+                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
+                        <span class="bms-nav-label">Submitted to OPS Finance</span>
+                    </a>
+
+                    <!-- Project History -->
+                    <a href="<?= url('/operations/history') ?>"
+                       class="bms-subnav-link <?= $isOpsHistoryActive ? 'active' : '' ?>"
+                       title="Project History">
+                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
+                        <span class="bms-nav-label">Project History</span>
                     </a>
                 </div>
             </div>

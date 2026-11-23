@@ -39,5 +39,33 @@ return [
         'dashboard_per_page' => 10,
         'projects_per_page' => 12,
     ],
+
+    /**
+     * Official category-specific document handoff package forwarded to Operations.
+     * MRC: JOM, SON, Marketing BOM, Marketing SLD (Exactly 4 docs)
+     * Special Project: JOM, Marketing PO, SON, Marketing BOM, Marketing SLD (Exactly 5 docs)
+     * CA, PROP, PROP-SUPPLIER are strictly excluded from Operations forwarding.
+     */
+    'ops_handoff' => [
+        'mrc' => [
+            'required_documents' => ['JOM', 'SON', 'BOM', 'SLD'],
+            'labels' => [
+                'JOM' => 'JOM — Job Order Memorandum',
+                'SON' => 'SON — Service On Notice',
+                'BOM' => 'BOM — Marketing Bill of Materials',
+                'SLD' => 'SLD — Marketing Single Line Diagram',
+            ],
+        ],
+        'special_project' => [
+            'required_documents' => ['JOM', 'PO', 'SON', 'BOM', 'SLD'],
+            'labels' => [
+                'JOM' => 'JOM — Job Order Memorandum',
+                'PO' => 'PO — Marketing-Uploaded Purchase Order',
+                'SON' => 'SON — Service On Notice',
+                'BOM' => 'BOM — Marketing Bill of Materials',
+                'SLD' => 'SLD — Marketing Single Line Diagram',
+            ],
+        ],
+    ],
 ];
 

@@ -372,6 +372,8 @@ final class AuthorizationService
 
         $status = (string) ($project['status'] ?? '');
         if (!in_array($status, [
+            Project::STATUS_SUBMITTED_TO_PM_AND_AFIN,
+            Project::STATUS_RESUBMITTED_TO_PM_AND_AFIN,
             Project::STATUS_SUBMITTED_FOR_VERIFICATION,
             Project::STATUS_SUBMITTED_FOR_VERIFICATION_SHORT,
             Project::STATUS_RESUBMITTED_FOR_VERIFICATION,
@@ -385,6 +387,221 @@ final class AuthorizationService
         }
 
         return self::isProjectManagementUser($user) && self::canViewProject($user, $project);
+    }
+
+    /**
+     * Determine whether a user can verify an individual Marketing document.
+     *
+     * @param array<string, mixed>|null $user
+     * @param array<string, mixed> $project
+     */
+    public static function canVerifyDocument(?array $user, array $project): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+
+        $status = (string) ($project['status'] ?? '');
+        if (!in_array($status, Project::pmReviewableStatuses(), true)) {
+            return false;
+        }
+
+        if (self::isAdmin($user)) {
+            return true;
+        }
+
+        return self::isProjectManagementUser($user) && self::canViewProject($user, $project);
+    }
+
+    /**
+     * Determine whether a user can upload or replace a JOM file for a project.
+     * Strictly authorized for Project Management users (and Administrators).
+     * Marketing and Admin Finance users are strictly blocked.
+     *
+     * @param array<string, mixed>|null $user
+     * @param array<string, mixed> $project
+     */
+    public static function canUploadJom(?array $user, array $project): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+
+        // Strictly block Marketing and Admin Finance users
+        if (!self::isAdmin($user) && !self::isProjectManagementUser($user)) {
+            return false;
+        }
+
+        // Project must be approved by PM to upload JOM
+        $status = (string) ($project['status'] ?? '');
+        $isApproved = Project::isApprovedByPm($project)
+            || in_array($status, [
+                Project::STATUS_APPROVED_BY_PM,
+                Project::STATUS_AWAITING_JOM_UPLOAD,
+                Project::STATUS_JOM_UPLOADED,
+                'Approved by Project Management',
+                'Document Verification Completed',
+            ], true);
+
+        if (!$isApproved) {
+            return false;
+        }
+
+        if (self::isAdmin($user)) {
+            return true;
+        }
+
+        return self::canViewProject($user, $project);
+    }
+
+    /**
+     * Determine whether Project Management can forward an approved, JOM-uploaded project to Operations.
+     *
+     * @param array<string, mixed>|null $user
+     * @param array<string, mixed> $project
+     */
+    public static function canPmForwardToOperations(?array $user, array $project): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::isProjectManagementUser($user)) {
+            return false;
+        }
+
+        // Prevent duplicate forwarding
+        if (Project::isForwardedToOperations($project)) {
+            return false;
+        }
+
+        // Must be approved by PM and have JOM file uploaded
+        $hasJom = !empty($project['jom_document_id']) || !empty($project['jom_number']);
+        if (!$hasJom) {
+            return false;
+        }
+
+        $isApproved = Project::isApprovedByPm($project)
+            || in_array((string) ($project['status'] ?? ''), [
+                Project::STATUS_APPROVED_BY_PM,
+                Project::STATUS_JOM_UPLOADED,
+                'Approved by Project Management',
+            ], true);
+
+        if (!$isApproved) {
+            return false;
+        }
+
+        if (self::isAdmin($user)) {
+            return true;
+        }
+
+        return self::canViewProject($user, $project);
+    }
+
+    /**
+     * Determine whether a user can upload or replace OPS documents (Final SLD, Final BOM, Request of PR).
+     * Strictly authorized for Operations users and Administrators.
+     *
+     * @param array<string, mixed>|null $user
+     * @param array<string, mixed> $project
+     */
+    public static function canUploadOpsDocument(?array $user, array $project): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::isOperationsUser($user)) {
+            return false;
+        }
+
+        // Project must have been forwarded to Operations
+        $isForwardedToOps = !empty($project['forwarded_to_ops_at'])
+            || in_array((string) ($project['status'] ?? ''), [
+                Project::STATUS_FORWARDED_TO_OPERATIONS,
+                Project::STATUS_FORWARDED_TO_OPS,
+                Project::STATUS_RECEIVED_BY_OPS,
+                Project::STATUS_UNDER_OPS_PROCESSING,
+                Project::STATUS_AWAITING_OPS_DOCUMENTS,
+                Project::STATUS_OPS_DOCUMENTS_COMPLETE,
+            ], true);
+
+        if (!$isForwardedToOps) {
+            return false;
+        }
+
+        // Cannot upload if already submitted to OPS Finance
+        if (!empty($project['submitted_to_opfin_at']) || ($project['status'] ?? '') === Project::STATUS_SUBMITTED_TO_OPS_FINANCE) {
+            return false;
+        }
+
+        if (self::isAdmin($user)) {
+            return true;
+        }
+
+        return self::canViewProject($user, $project);
+    }
+
+    /**
+     * Determine whether a user can submit the completed OPS project to OPS Finance.
+     * Requires: User is Operations or Admin, all 3 OPS documents uploaded, not yet submitted.
+     *
+     * @param array<string, mixed>|null $user
+     * @param array<string, mixed> $project
+     */
+    public static function canSubmitToOpsFinance(?array $user, array $project): bool
+    {
+        if ($user === null) {
+            return false;
+        }
+
+        if (!self::isAdmin($user) && !self::isOperationsUser($user)) {
+            return false;
+        }
+
+        // Project must not already be submitted
+        if (!empty($project['submitted_to_opfin_at']) || ($project['status'] ?? '') === Project::STATUS_SUBMITTED_TO_OPS_FINANCE) {
+            return false;
+        }
+
+        // Project must be forwarded to OPS
+        $isForwardedToOps = !empty($project['forwarded_to_ops_at'])
+            || in_array((string) ($project['status'] ?? ''), [
+                Project::STATUS_FORWARDED_TO_OPERATIONS,
+                Project::STATUS_FORWARDED_TO_OPS,
+                Project::STATUS_RECEIVED_BY_OPS,
+                Project::STATUS_UNDER_OPS_PROCESSING,
+                Project::STATUS_AWAITING_OPS_DOCUMENTS,
+                Project::STATUS_OPS_DOCUMENTS_COMPLETE,
+            ], true);
+
+        if (!$isForwardedToOps) {
+            return false;
+        }
+
+        // All 3 OPS documents must be present
+        $hasSld = !empty($project['ops_final_sld_document_id']);
+        $hasBom = !empty($project['ops_final_bom_document_id']);
+        $hasPr = !empty($project['ops_request_pr_document_id']);
+
+        if (!$hasSld || !$hasBom || !$hasPr) {
+            $projectId = (int) ($project['id'] ?? 0);
+            if ($projectId > 0) {
+                $docs = \App\Models\ProjectDocument::opsUploadedDocuments($projectId);
+                if (!$docs['is_complete']) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+
+        if (self::isAdmin($user)) {
+            return true;
+        }
+
+        return self::canViewProject($user, $project);
     }
 
     /**
@@ -1008,7 +1225,7 @@ final class AuthorizationService
     }
 
     /**
-     * Manage Product Catalog (create/edit items). Allowed: Admin, LOG, ADMFIN.
+     * Manage Product Catalog (create/edit items). Allowed: Admin, LOG, ADMFIN, OPS.
      *
      * @param array<string, mixed>|null $user
      */
@@ -1017,7 +1234,10 @@ final class AuthorizationService
         if ($user === null) {
             return false;
         }
-        return self::isAdmin($user) || self::isLogisticsUser($user) || self::isAdminFinanceUser($user);
+        return self::isAdmin($user)
+            || self::isLogisticsUser($user)
+            || self::isAdminFinanceUser($user)
+            || self::isOperationsUser($user);
     }
 
     /**

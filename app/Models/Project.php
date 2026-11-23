@@ -12,13 +12,19 @@ final class Project
 {
     public const STATUS_DRAFT = 'Draft';
     public const STATUS_PREPARING_DOCUMENTS = 'Preparing Documents';
+    public const STATUS_SUBMITTED_TO_PM_AND_AFIN = 'Submitted to Project Management and Admin Finance';
+    public const STATUS_RESUBMITTED_TO_PM_AND_AFIN = 'Resubmitted to Project Management and Admin Finance';
+    public const STATUS_UNDER_PM_REVIEW = 'Under Project Management Review';
     public const STATUS_SUBMITTED_FOR_VERIFICATION = 'Submitted for Document Verification';
     public const STATUS_SUBMITTED_FOR_VERIFICATION_SHORT = 'Submitted for Verification';
     public const STATUS_UNDER_REVIEW = 'Under Review';
     public const STATUS_RETURNED_FOR_CORRECTIONS = 'Returned for Corrections';
     public const STATUS_RETURNED_TO_MARKETING = 'Returned to Marketing for Corrections';
+    public const STATUS_RETURNED_TO_MARKETING_SHORT = 'Returned to Marketing';
     public const STATUS_RESUBMITTED_FOR_VERIFICATION = 'Resubmitted for Verification';
     public const STATUS_APPROVED_BY_PM = 'Approved by Project Management';
+    public const STATUS_AWAITING_JOM_UPLOAD = 'Awaiting JOM Upload';
+    public const STATUS_JOM_UPLOADED = 'JOM Uploaded';
     public const STATUS_VERIFICATION_COMPLETED = 'Approved by Project Management';
     public const STATUS_LEGACY_VERIFICATION_COMPLETED = 'Document Verification Completed';
     public const STATUS_FORWARDED_TO_ADMIN_FINANCE = 'Forwarded to Admin Finance';
@@ -26,6 +32,12 @@ final class Project
     public const STATUS_JOM_ISSUED = 'JOM Issued';
     public const STATUS_LEGACY_JOM_ISSUED = 'JOM Number Issued';
     public const STATUS_FORWARDED_TO_OPERATIONS = 'Forwarded to Operations';
+    public const STATUS_FORWARDED_TO_OPS = 'Forwarded to OPS';
+    public const STATUS_RECEIVED_BY_OPS = 'Received by OPS';
+    public const STATUS_UNDER_OPS_PROCESSING = 'Under OPS Processing';
+    public const STATUS_AWAITING_OPS_DOCUMENTS = 'Awaiting OPS Documents';
+    public const STATUS_OPS_DOCUMENTS_COMPLETE = 'OPS Documents Complete';
+    public const STATUS_SUBMITTED_TO_OPS_FINANCE = 'Submitted to OPS Finance';
     public const STATUS_PR_BEING_PREPARED = 'PR Being Prepared';
     public const STATUS_PR_SUBMITTED_TO_OPS_FINANCE = 'PR Submitted to OPS Finance';
     public const STATUS_ACTUAL_BOM_PENDING_UPLOAD = 'Actual BOM Pending Upload';
@@ -36,6 +48,11 @@ final class Project
     public const STATUS_ACTUAL_BOM_ACCEPTED = 'Actual BOM Accepted by Admin Finance';
     // Retained for backward compatibility with initial foundation records
     public const STATUS_SUBMITTED = 'Submitted';
+
+    public const CATEGORY_MRC = 'mrc';
+    public const CATEGORY_SPECIAL_PROJECT = 'special_project';
+    public const CATEGORY_LABEL_MRC = 'MRC';
+    public const CATEGORY_LABEL_SPECIAL_PROJECT = 'Special Project';
 
     public const VERIFICATION_NOT_SUBMITTED = 'not_submitted';
     public const VERIFICATION_PENDING_PM = 'pending_pm_review';
@@ -61,12 +78,15 @@ final class Project
             p.project_location,
             p.project_description,
             p.workflow_type,
+            p.project_category,
             p.origin_department_id,
             p.current_department_id,
             p.created_by,
             p.status,
             p.submitted_by,
             p.submitted_at,
+            p.submitted_to_afin_at,
+            p.submitted_to_afin_by,
             p.verification_status,
             p.returned_by,
             p.returned_at,
@@ -87,6 +107,23 @@ final class Project
             p.forwarded_to_ops_notes,
             p.ops_sld_document_id,
             p.ops_bom_document_id,
+            p.jom_document_id,
+            p.jom_uploaded_by,
+            p.jom_uploaded_at,
+            p.ops_jom_document_id,
+            p.ops_son_document_id,
+            p.ops_po_document_id,
+            p.ops_handoff_documents,
+            p.ops_received_at,
+            p.ops_received_by,
+            p.ops_processed_at,
+            p.ops_final_sld_document_id,
+            p.ops_final_bom_document_id,
+            p.ops_request_pr_document_id,
+            p.submitted_to_opfin_at,
+            p.submitted_to_opfin_by,
+            p.opfin_submission_notes,
+            p.opfin_handoff_documents,
             p.created_at,
             p.updated_at,
             d.department_name AS current_department_name,
@@ -97,26 +134,34 @@ final class Project
             u.username AS creator_username,
             u.department_id AS creator_department_id,
             su.full_name AS submitter_name,
+            afinsubu.full_name AS submitted_to_afin_by_name,
             ru.full_name AS returner_name,
             revu.full_name AS reviewer_name,
             vu.full_name AS verifier_name,
             afinu.full_name AS forwarded_to_afin_by_name,
             afinrevu.full_name AS afin_reviewed_by_name,
             opsfwdu.full_name AS forwarded_to_ops_by_name,
+            opsrecu.full_name AS ops_receiver_name,
+            opfinsubu.full_name AS submitted_to_opfin_by_name,
             jomu.full_name AS jom_issuer_name,
+            jomupu.full_name AS jom_uploader_name,
             (SELECT COUNT(*) FROM project_documents pd WHERE pd.project_id = p.id AND pd.is_current = 1) AS document_count
         FROM projects p
         LEFT JOIN departments d ON d.id = p.current_department_id
         LEFT JOIN departments od ON od.id = p.origin_department_id
         INNER JOIN users u ON u.id = p.created_by
         LEFT JOIN users su ON su.id = p.submitted_by
+        LEFT JOIN users afinsubu ON afinsubu.id = p.submitted_to_afin_by
         LEFT JOIN users ru ON ru.id = p.returned_by
         LEFT JOIN users revu ON revu.id = p.reviewed_by
         LEFT JOIN users vu ON vu.id = p.verified_by
         LEFT JOIN users afinu ON afinu.id = p.forwarded_to_afin_by
         LEFT JOIN users afinrevu ON afinrevu.id = p.afin_reviewed_by
         LEFT JOIN users opsfwdu ON opsfwdu.id = p.forwarded_to_ops_by
+        LEFT JOIN users opsrecu ON opsrecu.id = p.ops_received_by
+        LEFT JOIN users opfinsubu ON opfinsubu.id = p.submitted_to_opfin_by
         LEFT JOIN users jomu ON jomu.id = p.jom_issued_by
+        LEFT JOIN users jomupu ON jomupu.id = p.jom_uploaded_by
     ';
 
     /**
@@ -127,19 +172,31 @@ final class Project
         return [
             self::STATUS_DRAFT,
             self::STATUS_PREPARING_DOCUMENTS,
+            self::STATUS_SUBMITTED_TO_PM_AND_AFIN,
+            self::STATUS_RESUBMITTED_TO_PM_AND_AFIN,
+            self::STATUS_UNDER_PM_REVIEW,
             self::STATUS_SUBMITTED_FOR_VERIFICATION,
             self::STATUS_SUBMITTED_FOR_VERIFICATION_SHORT,
             self::STATUS_UNDER_REVIEW,
             self::STATUS_RETURNED_FOR_CORRECTIONS,
             self::STATUS_RETURNED_TO_MARKETING,
+            self::STATUS_RETURNED_TO_MARKETING_SHORT,
             self::STATUS_RESUBMITTED_FOR_VERIFICATION,
             self::STATUS_APPROVED_BY_PM,
+            self::STATUS_AWAITING_JOM_UPLOAD,
+            self::STATUS_JOM_UPLOADED,
             self::STATUS_LEGACY_VERIFICATION_COMPLETED,
             self::STATUS_FORWARDED_TO_ADMIN_FINANCE,
             self::STATUS_UNDER_ADMIN_FINANCE_REVIEW,
             self::STATUS_JOM_ISSUED,
             self::STATUS_LEGACY_JOM_ISSUED,
             self::STATUS_FORWARDED_TO_OPERATIONS,
+            self::STATUS_FORWARDED_TO_OPS,
+            self::STATUS_RECEIVED_BY_OPS,
+            self::STATUS_UNDER_OPS_PROCESSING,
+            self::STATUS_AWAITING_OPS_DOCUMENTS,
+            self::STATUS_OPS_DOCUMENTS_COMPLETE,
+            self::STATUS_SUBMITTED_TO_OPS_FINANCE,
             self::STATUS_PR_BEING_PREPARED,
             self::STATUS_PR_SUBMITTED_TO_OPS_FINANCE,
             self::STATUS_ACTUAL_BOM_PENDING_UPLOAD,
@@ -160,8 +217,13 @@ final class Project
         return [
             self::STATUS_DRAFT,
             self::STATUS_PREPARING_DOCUMENTS,
+            self::STATUS_SUBMITTED_TO_PM_AND_AFIN,
+            self::STATUS_RESUBMITTED_TO_PM_AND_AFIN,
+            self::STATUS_UNDER_PM_REVIEW,
             self::STATUS_SUBMITTED_FOR_VERIFICATION,
             self::STATUS_RETURNED_FOR_CORRECTIONS,
+            self::STATUS_RETURNED_TO_MARKETING,
+            self::STATUS_RETURNED_TO_MARKETING_SHORT,
             self::STATUS_RESUBMITTED_FOR_VERIFICATION,
             self::STATUS_APPROVED_BY_PM,
             self::STATUS_FORWARDED_TO_ADMIN_FINANCE,
@@ -183,6 +245,7 @@ final class Project
             self::STATUS_PREPARING_DOCUMENTS,
             self::STATUS_RETURNED_FOR_CORRECTIONS,
             self::STATUS_RETURNED_TO_MARKETING,
+            self::STATUS_RETURNED_TO_MARKETING_SHORT,
         ];
     }
 
@@ -281,6 +344,12 @@ final class Project
 
         return in_array($status, [
             self::STATUS_FORWARDED_TO_OPERATIONS,
+            self::STATUS_FORWARDED_TO_OPS,
+            self::STATUS_RECEIVED_BY_OPS,
+            self::STATUS_UNDER_OPS_PROCESSING,
+            self::STATUS_AWAITING_OPS_DOCUMENTS,
+            self::STATUS_OPS_DOCUMENTS_COMPLETE,
+            self::STATUS_SUBMITTED_TO_OPS_FINANCE,
             self::STATUS_PR_BEING_PREPARED,
             self::STATUS_PR_SUBMITTED_TO_OPS_FINANCE,
             self::STATUS_ACTUAL_BOM_PENDING_UPLOAD,
@@ -295,6 +364,22 @@ final class Project
     }
 
     /**
+     * Determine whether a project has been submitted to OPS Finance.
+     *
+     * @param array<string, mixed> $project
+     */
+    public static function isSubmittedToOpsFinance(array $project): bool
+    {
+        $status = (string) ($project['status'] ?? '');
+
+        return !empty($project['submitted_to_opfin_at'])
+            || in_array($status, [
+                self::STATUS_SUBMITTED_TO_OPS_FINANCE,
+                self::STATUS_PR_SUBMITTED_TO_OPS_FINANCE,
+            ], true);
+    }
+
+    /**
      * Statuses representing projects queued with Project Management for document verification.
      *
      * @return list<string>
@@ -302,6 +387,9 @@ final class Project
     public static function pmVerificationQueueStatuses(): array
     {
         return [
+            self::STATUS_SUBMITTED_TO_PM_AND_AFIN,
+            self::STATUS_RESUBMITTED_TO_PM_AND_AFIN,
+            self::STATUS_UNDER_PM_REVIEW,
             self::STATUS_SUBMITTED_FOR_VERIFICATION,
             self::STATUS_SUBMITTED_FOR_VERIFICATION_SHORT,
             self::STATUS_RESUBMITTED_FOR_VERIFICATION,
@@ -318,6 +406,9 @@ final class Project
     public static function pmReviewableStatuses(): array
     {
         return [
+            self::STATUS_SUBMITTED_TO_PM_AND_AFIN,
+            self::STATUS_RESUBMITTED_TO_PM_AND_AFIN,
+            self::STATUS_UNDER_PM_REVIEW,
             self::STATUS_SUBMITTED_FOR_VERIFICATION,
             self::STATUS_SUBMITTED_FOR_VERIFICATION_SHORT,
             self::STATUS_RESUBMITTED_FOR_VERIFICATION,
@@ -482,16 +573,21 @@ final class Project
      * Database-driven statistics for the dedicated Marketing Dashboard.
      *
      * @param list<string> $requiredDocTypes
+     * @param string $categoryFilter Optional category filter ('mrc' or 'special_project')
      * @return array{
      *   total_marketing_projects: int,
+     *   mrc_projects: int,
+     *   special_projects: int,
      *   draft_projects: int,
      *   awaiting_doc_prep: int,
      *   submitted_to_pm: int,
+     *   submitted_projects: int,
+     *   under_review_projects: int,
      *   returned_for_corrections: int,
      *   missing_documents: int
      * }
      */
-    public static function marketingDashboardStats(int $marketingDeptId, array $requiredDocTypes): array
+    public static function marketingDashboardStats(int $marketingDeptId, array $requiredDocTypes, string $categoryFilter = ''): array
     {
         $reqCount = count($requiredDocTypes);
         $docPlaceholders = [];
@@ -509,19 +605,31 @@ final class Project
         }
 
         $inListSql = $docPlaceholders !== [] ? implode(', ', $docPlaceholders) : "''";
+        $categoryCondition = '';
+        if ($categoryFilter === 'mrc') {
+            $categoryCondition = " AND (p.workflow_type IN ('mrc', 'standard') OR p.project_category = 'MRC')";
+        } elseif ($categoryFilter === 'special_project') {
+            $categoryCondition = " AND (p.workflow_type = 'special_project' OR p.project_category = 'Special Project')";
+        }
 
         $sql = "
             SELECT
                 COUNT(*) AS total_marketing_projects,
+                COALESCE(SUM(CASE WHEN sub.workflow_type IN ('mrc', 'standard') OR sub.project_category = 'MRC' THEN 1 ELSE 0 END), 0) AS mrc_projects,
+                COALESCE(SUM(CASE WHEN sub.workflow_type = 'special_project' OR sub.project_category = 'Special Project' THEN 1 ELSE 0 END), 0) AS special_projects,
                 COALESCE(SUM(CASE WHEN sub.status = 'Draft' THEN 1 ELSE 0 END), 0) AS draft_projects,
                 COALESCE(SUM(CASE WHEN sub.status = 'Preparing Documents' THEN 1 ELSE 0 END), 0) AS awaiting_doc_prep,
-                COALESCE(SUM(CASE WHEN sub.status IN ('Submitted for Document Verification', 'Submitted for Verification', 'Resubmitted for Verification', 'Under Review', 'Submitted') THEN 1 ELSE 0 END), 0) AS submitted_to_pm,
-                COALESCE(SUM(CASE WHEN sub.status IN ('Returned for Corrections', 'Returned to Marketing for Corrections') THEN 1 ELSE 0 END), 0) AS returned_for_corrections,
+                COALESCE(SUM(CASE WHEN sub.status IN ('Submitted to Project Management and Admin Finance', 'Resubmitted to Project Management and Admin Finance', 'Submitted for Document Verification', 'Submitted for Verification', 'Resubmitted for Verification', 'Under Review', 'Under Project Management Review', 'Submitted') THEN 1 ELSE 0 END), 0) AS submitted_to_pm,
+                COALESCE(SUM(CASE WHEN sub.status IN ('Submitted to Project Management and Admin Finance', 'Resubmitted to Project Management and Admin Finance', 'Submitted for Document Verification', 'Submitted for Verification', 'Resubmitted for Verification', 'Submitted') THEN 1 ELSE 0 END), 0) AS submitted_projects,
+                COALESCE(SUM(CASE WHEN sub.status IN ('Under Review', 'Under Project Management Review') THEN 1 ELSE 0 END), 0) AS under_review_projects,
+                COALESCE(SUM(CASE WHEN sub.status IN ('Returned for Corrections', 'Returned to Marketing for Corrections', 'Returned to Marketing') THEN 1 ELSE 0 END), 0) AS returned_for_corrections,
                 COALESCE(SUM(CASE WHEN sub.uploaded_req_docs < :req_count THEN 1 ELSE 0 END), 0) AS missing_documents
             FROM (
                 SELECT
                     p.id,
                     p.status,
+                    p.workflow_type,
+                    p.project_category,
                     (
                         SELECT COUNT(DISTINCT pd.document_type)
                         FROM project_documents pd
@@ -531,9 +639,10 @@ final class Project
                     ) AS uploaded_req_docs
                 FROM projects p
                 INNER JOIN users u ON u.id = p.created_by
-                WHERE p.origin_department_id = :mkt_origin
+                WHERE (p.origin_department_id = :mkt_origin
                    OR p.current_department_id = :mkt_curr
-                   OR u.department_id = :mkt_creator
+                   OR u.department_id = :mkt_creator)
+                   {$categoryCondition}
             ) AS sub
         ";
 
@@ -543,9 +652,13 @@ final class Project
 
         return [
             'total_marketing_projects' => (int) ($row['total_marketing_projects'] ?? 0),
+            'mrc_projects' => (int) ($row['mrc_projects'] ?? 0),
+            'special_projects' => (int) ($row['special_projects'] ?? 0),
             'draft_projects' => (int) ($row['draft_projects'] ?? 0),
             'awaiting_doc_prep' => (int) ($row['awaiting_doc_prep'] ?? 0),
             'submitted_to_pm' => (int) ($row['submitted_to_pm'] ?? 0),
+            'submitted_projects' => (int) ($row['submitted_projects'] ?? 0),
+            'under_review_projects' => (int) ($row['under_review_projects'] ?? 0),
             'returned_for_corrections' => (int) ($row['returned_for_corrections'] ?? 0),
             'missing_documents' => (int) ($row['missing_documents'] ?? 0),
         ];
@@ -553,7 +666,7 @@ final class Project
 
     /**
      * Paginated Marketing project list with search, workflow status filter,
-     * document completeness filter, and creation date sorting.
+     * category filter, document completeness filter, and creation date sorting.
      *
      * @param list<string> $requiredDocTypes
      * @param array<string, mixed> $filters
@@ -602,9 +715,22 @@ final class Project
             $whereParams['q3'] = $like;
         }
 
+        $category = trim((string) ($filters['category'] ?? ''));
+        if ($category === 'mrc') {
+            $conditions[] = "(p.workflow_type IN ('mrc', 'standard') OR p.project_category = 'MRC')";
+        } elseif ($category === 'special_project') {
+            $conditions[] = "(p.workflow_type = 'special_project' OR p.project_category = 'Special Project')";
+        }
+
         $status = trim((string) ($filters['status'] ?? ''));
-        if ($status === 'pm_queue') {
-            $conditions[] = "p.status IN ('Submitted for Document Verification', 'Resubmitted for Verification', 'Submitted')";
+        if ($status === 'pm_queue' || $status === 'submitted' || $status === 'submitted_queue') {
+            $conditions[] = "p.status IN ('Submitted to Project Management and Admin Finance', 'Resubmitted to Project Management and Admin Finance', 'Submitted for Document Verification', 'Submitted for Verification', 'Resubmitted for Verification', 'Submitted')";
+        } elseif ($status === 'draft') {
+            $conditions[] = "p.status = 'Draft'";
+        } elseif ($status === 'returned') {
+            $conditions[] = "p.status IN ('Returned for Corrections', 'Returned to Marketing for Corrections', 'Returned to Marketing')";
+        } elseif ($status === 'under_review') {
+            $conditions[] = "p.status IN ('Under Review', 'Under Project Management Review')";
         } elseif ($status !== '' && in_array($status, self::availableStatuses(), true)) {
             $conditions[] = 'p.status = :status';
             $whereParams['status'] = $status;
@@ -652,12 +778,15 @@ final class Project
                 p.client_contact,
                 p.project_location,
                 p.workflow_type,
+                p.project_category,
                 p.origin_department_id,
                 p.current_department_id,
                 p.created_by,
                 p.status,
                 p.submitted_by,
                 p.submitted_at,
+                p.submitted_to_afin_at,
+                p.submitted_to_afin_by,
                 p.verification_status,
                 p.returned_by,
                 p.returned_at,
@@ -689,9 +818,13 @@ final class Project
         $items = $stmt->fetchAll();
         foreach ($items as &$item) {
             $uploaded = (int) ($item['uploaded_required_count'] ?? 0);
+            $cat = (string) ($item['project_category'] ?? $item['workflow_type'] ?? 'mrc');
+            $isSpecial = strtolower($cat) === 'special project' || strtolower($cat) === 'special_project';
+            $itemRequiredCount = $isSpecial ? 7 : 6;
             $item['uploaded_required_count'] = $uploaded;
-            $item['required_total_count'] = $reqCount;
-            $item['is_documents_complete'] = $reqCount > 0 ? ($uploaded >= $reqCount) : true;
+            $item['required_total_count'] = $itemRequiredCount;
+            $item['is_documents_complete'] = $uploaded >= $itemRequiredCount;
+            $item['category_label'] = $isSpecial ? 'Special Project' : 'MRC';
         }
         unset($item);
 
@@ -731,6 +864,9 @@ final class Project
     public static function create(array $data): int
     {
         $pdo = Database::connection();
+        $workflowType = (string) ($data['workflow_type'] ?? 'mrc');
+        $projectCategory = (string) ($data['project_category'] ?? ($workflowType === 'special_project' ? 'Special Project' : 'MRC'));
+
         $stmt = $pdo->prepare(
             'INSERT INTO projects (
                 project_code,
@@ -740,6 +876,7 @@ final class Project
                 project_location,
                 project_description,
                 workflow_type,
+                project_category,
                 origin_department_id,
                 current_department_id,
                 created_by,
@@ -754,6 +891,7 @@ final class Project
                 :project_location,
                 :project_description,
                 :workflow_type,
+                :project_category,
                 :origin_department_id,
                 :current_department_id,
                 :created_by,
@@ -770,7 +908,8 @@ final class Project
             'client_contact' => $data['client_contact'] !== '' ? $data['client_contact'] : null,
             'project_location' => $data['project_location'] !== '' ? $data['project_location'] : null,
             'project_description' => $data['project_description'] !== '' ? $data['project_description'] : null,
-            'workflow_type' => $data['workflow_type'] ?? 'standard',
+            'workflow_type' => $workflowType,
+            'project_category' => $projectCategory,
             'origin_department_id' => $data['origin_department_id'] ?? $data['current_department_id'],
             'current_department_id' => $data['current_department_id'],
             'created_by' => $data['created_by'],
@@ -780,6 +919,38 @@ final class Project
         ]);
 
         return (int) $pdo->lastInsertId();
+    }
+
+    /**
+     * Mark a project submitted simultaneously to Project Management and Admin Finance.
+     */
+    public static function markSubmittedSimultaneous(
+        int $id,
+        string $targetStatus,
+        int $pmDepartmentId,
+        int $actorId
+    ): void {
+        $stmt = Database::connection()->prepare(
+            'UPDATE projects
+             SET status = :status,
+                 current_department_id = :pm_dept_id,
+                 submitted_by = :submitted_by,
+                 submitted_at = NOW(),
+                 submitted_to_afin_by = :submitted_to_afin_by,
+                 submitted_to_afin_at = NOW(),
+                 verification_status = :verification_status,
+                 attention_documents = NULL,
+                 updated_at = NOW()
+             WHERE id = :id'
+        );
+        $stmt->execute([
+            'status' => $targetStatus,
+            'pm_dept_id' => $pmDepartmentId,
+            'submitted_by' => $actorId,
+            'submitted_to_afin_by' => $actorId,
+            'verification_status' => self::VERIFICATION_PENDING_PM,
+            'id' => $id,
+        ]);
     }
 
     /**
@@ -1225,49 +1396,74 @@ final class Project
      *   jom_issued: int
      * }
      */
-    public static function pmDashboardStats(int $pmDeptId): array
+    public static function pmDashboardStats(int $pmDeptId, string $categoryFilter = ''): array
     {
+        $params = ['pm_dept_id' => $pmDeptId];
+        $categoryCondition = '';
+        $normalizedCat = strtolower(trim($categoryFilter));
+        if ($normalizedCat === 'mrc') {
+            $categoryCondition = " AND (p.workflow_type IN ('mrc', 'standard') OR p.project_category = 'MRC')";
+        } elseif ($normalizedCat === 'special_project' || $normalizedCat === 'special project') {
+            $categoryCondition = " AND (p.workflow_type = 'special_project' OR p.project_category = 'Special Project')";
+        }
+
         $sql = "
             SELECT
                 COUNT(*) AS total_pm_projects,
-                COALESCE(SUM(CASE WHEN p.status IN ('Submitted for Document Verification', 'Submitted for Verification', 'Submitted') THEN 1 ELSE 0 END), 0) AS pending_verification,
-                COALESCE(SUM(CASE WHEN p.status = 'Under Review' THEN 1 ELSE 0 END), 0) AS under_review,
-                COALESCE(SUM(CASE WHEN p.status IN ('Returned for Corrections', 'Returned to Marketing for Corrections') THEN 1 ELSE 0 END), 0) AS returned_to_marketing,
-                COALESCE(SUM(CASE WHEN p.status = 'Resubmitted for Verification' THEN 1 ELSE 0 END), 0) AS resubmitted,
-                COALESCE(SUM(CASE WHEN p.status IN ('Approved by Project Management', 'Document Verification Completed') OR (p.verification_status IN ('verified_complete', 'approved_by_pm') AND p.status NOT IN ('Forwarded to Admin Finance', 'Under Admin Finance Review', 'JOM Issued', 'JOM Number Issued', 'Forwarded to Operations')) THEN 1 ELSE 0 END), 0) AS approved,
+                COUNT(*) AS total_received,
+                COALESCE(SUM(CASE WHEN p.workflow_type IN ('mrc', 'standard') OR p.project_category = 'MRC' THEN 1 ELSE 0 END), 0) AS mrc_projects,
+                COALESCE(SUM(CASE WHEN p.workflow_type = 'special_project' OR p.project_category = 'Special Project' THEN 1 ELSE 0 END), 0) AS special_projects,
+                COALESCE(SUM(CASE WHEN p.status IN ('Submitted to Project Management and Admin Finance', 'Submitted for Document Verification', 'Submitted for Verification', 'Submitted') THEN 1 ELSE 0 END), 0) AS pending_verification,
+                COALESCE(SUM(CASE WHEN p.status IN ('Under Review', 'Under Project Management Review') THEN 1 ELSE 0 END), 0) AS under_review,
+                COALESCE(SUM(CASE WHEN p.status IN ('Returned for Corrections', 'Returned to Marketing for Corrections', 'Returned to Marketing') THEN 1 ELSE 0 END), 0) AS returned_to_marketing,
+                COALESCE(SUM(CASE WHEN p.status IN ('Resubmitted to Project Management and Admin Finance', 'Resubmitted for Verification') THEN 1 ELSE 0 END), 0) AS resubmitted,
+                COALESCE(SUM(CASE WHEN p.status IN ('Approved by Project Management', 'Document Verification Completed', 'Awaiting JOM Upload', 'JOM Uploaded', 'Forwarded to OPS', 'Forwarded to Operations') OR (p.verification_status IN ('verified_complete', 'approved_by_pm')) THEN 1 ELSE 0 END), 0) AS approved,
+                COALESCE(SUM(CASE WHEN (p.status IN ('Approved by Project Management', 'Awaiting JOM Upload', 'Document Verification Completed') OR p.verification_status IN ('verified_complete', 'approved_by_pm')) AND (p.jom_document_id IS NULL AND p.jom_number IS NULL) AND p.status NOT IN ('Forwarded to OPS', 'Forwarded to Operations', 'JOM Uploaded') THEN 1 ELSE 0 END), 0) AS awaiting_jom_upload,
+                COALESCE(SUM(CASE WHEN p.status IN ('Forwarded to OPS', 'Forwarded to Operations') OR p.forwarded_to_ops_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS forwarded_to_ops,
                 COALESCE(SUM(CASE WHEN p.status IN ('Forwarded to Admin Finance', 'Under Admin Finance Review', 'JOM Issued', 'JOM Number Issued', 'Forwarded to Operations') OR p.verification_status IN ('forwarded_to_admin_finance', 'under_admin_finance_review', 'jom_issued', 'forwarded_to_operations') OR p.forwarded_to_afin_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS forwarded_to_admin_finance,
                 COALESCE(SUM(CASE WHEN p.jom_number IS NOT NULL OR p.status IN ('JOM Issued', 'JOM Number Issued') THEN 1 ELSE 0 END), 0) AS jom_issued
             FROM projects p
-            WHERE p.current_department_id = :pm_dept_id
+            WHERE (p.current_department_id = :pm_dept_id
                OR p.verification_status != 'not_submitted'
-               OR p.submitted_at IS NOT NULL
+               OR p.submitted_at IS NOT NULL)
+               {$categoryCondition}
         ";
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['pm_dept_id' => $pmDeptId]);
+        $stmt->execute($params);
         $row = $stmt->fetch() ?: [];
 
         $pending = (int) ($row['pending_verification'] ?? 0);
         $resubmitted = (int) ($row['resubmitted'] ?? 0);
         $approved = (int) ($row['approved'] ?? 0);
+        $awaitingJom = (int) ($row['awaiting_jom_upload'] ?? 0);
+        $forwardedOps = (int) ($row['forwarded_to_ops'] ?? 0);
 
         return [
             'total_pm_projects' => (int) ($row['total_pm_projects'] ?? 0),
+            'total_received' => (int) ($row['total_received'] ?? 0),
+            'mrc_projects' => (int) ($row['mrc_projects'] ?? 0),
+            'special_projects' => (int) ($row['special_projects'] ?? 0),
             'pending_verification' => $pending,
             'awaiting_verification' => $pending,
             'under_review' => (int) ($row['under_review'] ?? 0),
             'returned_to_marketing' => (int) ($row['returned_to_marketing'] ?? 0),
             'resubmitted' => $resubmitted,
+            'resubmitted_projects' => $resubmitted,
             'resubmitted_for_verification' => $resubmitted,
             'approved' => $approved,
+            'approved_projects' => $approved,
             'verification_completed' => $approved,
+            'awaiting_jom_upload' => $awaitingJom,
+            'forwarded_to_ops' => $forwardedOps,
             'forwarded_to_admin_finance' => (int) ($row['forwarded_to_admin_finance'] ?? 0),
             'jom_issued' => (int) ($row['jom_issued'] ?? 0),
         ];
     }
 
     /**
-     * Paginated Project Management project list with search, status filtering, and sorting.
+     * Paginated Project Management project list with search, status filtering, category filtering,
+     * date range filtering, and sorting.
      *
      * @param array<string, mixed> $filters
      * @return array{items: list<array<string, mixed>>, total: int, page: int, per_page: int, total_pages: int}
@@ -1283,6 +1479,7 @@ final class Project
         ];
         $params = ['pm_dept_id' => $pmDeptId];
 
+        // Search Keyword
         $search = trim((string) ($filters['q'] ?? ''));
         if ($search !== '') {
             $conditions[] = '(p.project_code LIKE :q1 OR p.jom_number LIKE :q2 OR p.project_name LIKE :q3 OR p.client_name LIKE :q4)';
@@ -1293,25 +1490,48 @@ final class Project
             $params['q4'] = $like;
         }
 
+        // Category Filter
+        $category = strtolower(trim((string) ($filters['category'] ?? '')));
+        if ($category === 'mrc') {
+            $conditions[] = "(p.workflow_type IN ('mrc', 'standard') OR p.project_category = 'MRC')";
+        } elseif ($category === 'special_project' || $category === 'special project') {
+            $conditions[] = "(p.workflow_type = 'special_project' OR p.project_category = 'Special Project')";
+        }
+
+        // Submission Date Range
+        $dateFrom = trim((string) ($filters['date_from'] ?? ''));
+        if ($dateFrom !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateFrom)) {
+            $conditions[] = 'DATE(COALESCE(p.submitted_at, p.created_at)) >= :date_from';
+            $params['date_from'] = $dateFrom;
+        }
+        $dateTo = trim((string) ($filters['date_to'] ?? ''));
+        if ($dateTo !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateTo)) {
+            $conditions[] = 'DATE(COALESCE(p.submitted_at, p.created_at)) <= :date_to';
+            $params['date_to'] = $dateTo;
+        }
+
+        // Status Filter
         $status = trim((string) ($filters['status'] ?? ''));
-        if ($status === 'awaiting' || $status === 'pending') {
-            $conditions[] = "p.status IN ('Submitted for Document Verification', 'Submitted for Verification', 'Submitted')";
-        } elseif ($status === 'verification_queue' || $status === 'pm_queue') {
-            $conditions[] = "p.status IN ('Submitted for Document Verification', 'Submitted for Verification', 'Submitted', 'Resubmitted for Verification')";
+        if ($status === 'awaiting' || $status === 'pending' || $status === 'incoming') {
+            $conditions[] = "p.status IN ('Submitted to Project Management and Admin Finance', 'Submitted for Document Verification', 'Submitted for Verification', 'Submitted')";
+        } elseif ($status === 'verification_queue' || $status === 'pm_queue' || $status === 'verification') {
+            $conditions[] = "p.status IN ('Submitted to Project Management and Admin Finance', 'Resubmitted to Project Management and Admin Finance', 'Under Project Management Review', 'Submitted for Document Verification', 'Submitted for Verification', 'Submitted', 'Resubmitted for Verification', 'Under Review')";
         } elseif ($status === 'under_review') {
-            $conditions[] = "p.status = 'Under Review'";
+            $conditions[] = "p.status IN ('Under Review', 'Under Project Management Review')";
         } elseif ($status === 'returned') {
-            $conditions[] = "p.status IN ('Returned for Corrections', 'Returned to Marketing for Corrections')";
+            $conditions[] = "p.status IN ('Returned to Marketing', 'Returned for Corrections', 'Returned to Marketing for Corrections')";
         } elseif ($status === 'resubmitted') {
-            $conditions[] = "p.status = 'Resubmitted for Verification'";
-        } elseif ($status === 'ready_for_admin_finance' || $status === 'ready_forward') {
-            $conditions[] = "(p.status IN ('Approved by Project Management', 'Document Verification Completed') AND p.forwarded_to_afin_at IS NULL)";
+            $conditions[] = "p.status IN ('Resubmitted to Project Management and Admin Finance', 'Resubmitted for Verification')";
+        } elseif ($status === 'awaiting_jom' || $status === 'awaiting_jom_upload') {
+            $conditions[] = "(p.status IN ('Approved by Project Management', 'Awaiting JOM Upload') AND p.jom_document_id IS NULL AND p.jom_number IS NULL)";
+        } elseif ($status === 'jom_uploaded') {
+            $conditions[] = "(p.status = 'JOM Uploaded' OR p.jom_document_id IS NOT NULL)";
         } elseif (in_array($status, ['approved', 'completed', 'verified'], true)) {
-            $conditions[] = "(p.status IN ('Approved by Project Management', 'Document Verification Completed') OR (p.verification_status IN ('verified_complete', 'approved_by_pm') AND p.status != 'Forwarded to Admin Finance'))";
-        } elseif (in_array($status, ['forwarded_to_admin_finance', 'forwarded'], true)) {
-            $conditions[] = "(p.status IN ('Forwarded to Admin Finance', 'Under Admin Finance Review', 'JOM Issued', 'JOM Number Issued', 'Forwarded to Operations') OR p.verification_status IN ('forwarded_to_admin_finance', 'under_admin_finance_review', 'jom_issued', 'forwarded_to_operations') OR p.forwarded_to_afin_at IS NOT NULL)";
-        } elseif ($status === 'jom_issued') {
-            $conditions[] = "(p.jom_number IS NOT NULL OR p.status IN ('JOM Issued', 'JOM Number Issued'))";
+            $conditions[] = "(p.status IN ('Approved by Project Management', 'Document Verification Completed', 'Awaiting JOM Upload', 'JOM Uploaded') OR (p.verification_status IN ('verified_complete', 'approved_by_pm') AND p.status NOT IN ('Forwarded to OPS', 'Forwarded to Operations')))";
+        } elseif (in_array($status, ['forwarded_ops', 'forwarded_to_ops'], true)) {
+            $conditions[] = "(p.status IN ('Forwarded to OPS', 'Forwarded to Operations') OR p.forwarded_to_ops_at IS NOT NULL)";
+        } elseif ($status === 'history') {
+            // All PM projects
         } elseif ($status !== '' && in_array($status, self::availableStatuses(), true)) {
             $conditions[] = 'p.status = :status';
             $params['status'] = $status;
@@ -1332,7 +1552,7 @@ final class Project
         $sort = (string) ($filters['sort'] ?? 'newest');
         $orderBy = match ($sort) {
             'oldest' => 'ORDER BY p.id ASC',
-            'submitted' => 'ORDER BY p.submitted_at DESC, p.id DESC',
+            'submitted' => 'ORDER BY COALESCE(p.submitted_at, p.created_at) DESC, p.id DESC',
             'client' => 'ORDER BY p.client_name ASC, p.id DESC',
             default => 'ORDER BY p.id DESC',
         };
@@ -1351,13 +1571,401 @@ final class Project
         $dataStmt->bindValue(':offset_rows', $offset, PDO::PARAM_INT);
         $dataStmt->execute();
 
+        $items = $dataStmt->fetchAll();
+        foreach ($items as &$item) {
+            $cat = (string) ($item['project_category'] ?? $item['workflow_type'] ?? 'mrc');
+            $isSpecial = (strcasecmp($cat, 'Special Project') === 0 || strtolower($cat) === 'special_project');
+            $reqCount = $isSpecial ? 7 : 6;
+            $item['category_label'] = $isSpecial ? 'Special Project' : 'MRC';
+            $item['required_count'] = $reqCount;
+            $uploadedCount = (int) ($item['document_count'] ?? 0);
+            $item['uploaded_required_count'] = $uploadedCount;
+            $item['is_documents_complete'] = ($uploadedCount >= $reqCount);
+            $item['has_jom'] = !empty($item['jom_document_id']) || !empty($item['jom_number']);
+        }
+        unset($item);
+
         return [
-            'items' => $dataStmt->fetchAll(),
+            'items' => $items,
             'total' => $total,
             'page' => $page,
             'per_page' => $perPage,
             'total_pages' => $totalPages,
         ];
+    }
+
+    /**
+     * Mark project as Approved by Project Management.
+     */
+    public static function markApprovedByPm(
+        int $id,
+        int $verifiedByUserId,
+        ?string $notes = null
+    ): void {
+        $stmt = Database::connection()->prepare(
+            'UPDATE projects
+             SET status = :status,
+                 verification_status = :verification_status,
+                 verified_by = :verified_by,
+                 verified_at = NOW(),
+                 verification_notes = :notes,
+                 updated_at = NOW()
+             WHERE id = :id'
+        );
+        $stmt->execute([
+            'status' => self::STATUS_APPROVED_BY_PM,
+            'verification_status' => self::VERIFICATION_APPROVED_PM,
+            'verified_by' => $verifiedByUserId,
+            'notes' => $notes !== null && trim($notes) !== '' ? trim($notes) : null,
+            'id' => $id,
+        ]);
+    }
+
+    /**
+     * Mark project status as JOM Uploaded after Project Management uploads the JOM file.
+     */
+    public static function markJomUploaded(
+        int $id,
+        int $jomDocId,
+        int $actorId
+    ): void {
+        $stmt = Database::connection()->prepare(
+            'UPDATE projects
+             SET status = :status,
+                 jom_document_id = :jom_doc_id,
+                 jom_uploaded_by = :actor_id,
+                 jom_uploaded_at = NOW(),
+                 updated_at = NOW()
+             WHERE id = :id'
+        );
+        $stmt->execute([
+            'status' => self::STATUS_JOM_UPLOADED,
+            'jom_doc_id' => $jomDocId,
+            'actor_id' => $actorId,
+            'id' => $id,
+        ]);
+    }
+
+    /**
+     * Forward project from Project Management to Operations with category-specific documents.
+     */
+    public static function markForwardedToOpsByPm(
+        int $id,
+        int $operationsDeptId,
+        int $forwardedByUserId,
+        int $jomDocId,
+        int $sonDocId,
+        int $bomDocId,
+        int $sldDocId,
+        ?int $poDocId = null,
+        ?string $notes = null,
+        ?array $handoffDocs = null
+    ): bool {
+        $handoffJson = $handoffDocs !== null ? json_encode($handoffDocs, JSON_UNESCAPED_UNICODE) : null;
+        $stmt = Database::connection()->prepare(
+            'UPDATE projects
+             SET status = :status,
+                 current_department_id = :ops_dept_id,
+                 verification_status = :verification_status,
+                 forwarded_to_ops_by = :forwarded_by,
+                 forwarded_to_ops_at = NOW(),
+                 forwarded_to_ops_notes = :forwarded_notes,
+                 ops_jom_document_id = :jom_doc_id,
+                 ops_son_document_id = :son_doc_id,
+                 ops_bom_document_id = :bom_doc_id,
+                 ops_sld_document_id = :sld_doc_id,
+                 ops_po_document_id = :po_doc_id,
+                 ops_handoff_documents = :handoff_json,
+                 updated_at = NOW()
+             WHERE id = :id
+               AND forwarded_to_ops_at IS NULL'
+        );
+        $stmt->execute([
+            'status' => self::STATUS_FORWARDED_TO_OPS,
+            'ops_dept_id' => $operationsDeptId,
+            'verification_status' => self::VERIFICATION_FORWARDED_OPS,
+            'forwarded_by' => $forwardedByUserId,
+            'forwarded_notes' => $notes !== null && trim($notes) !== '' ? trim($notes) : null,
+            'jom_doc_id' => $jomDocId,
+            'son_doc_id' => $sonDocId,
+            'bom_doc_id' => $bomDocId,
+            'sld_doc_id' => $sldDocId,
+            'po_doc_id' => $poDocId,
+            'handoff_json' => $handoffJson,
+            'id' => $id,
+        ]);
+
+        return $stmt->rowCount() > 0;
+    }
+
+    /**
+     * Database-driven metrics for the Operations dashboard summary cards.
+     *
+     * @return array{
+     *   total_received: int,
+     *   mrc_projects: int,
+     *   special_projects: int,
+     *   pending_processing: int,
+     *   under_processing: int,
+     *   missing_documents: int,
+     *   documents_complete: int,
+     *   submitted_to_opfin: int
+     * }
+     */
+    public static function opsDashboardStats(int $opsDeptId, string $categoryFilter = ''): array
+    {
+        $params = ['ops_dept_id' => $opsDeptId];
+        $categoryCondition = '';
+        $normalizedCat = strtolower(trim($categoryFilter));
+        if ($normalizedCat === 'mrc') {
+            $categoryCondition = " AND (p.workflow_type IN ('mrc', 'standard') OR p.project_category = 'MRC')";
+        } elseif ($normalizedCat === 'special_project' || $normalizedCat === 'special project') {
+            $categoryCondition = " AND (p.workflow_type = 'special_project' OR p.project_category = 'Special Project')";
+        }
+
+        $sql = "
+            SELECT
+                COUNT(*) AS total_received,
+                COALESCE(SUM(CASE WHEN p.workflow_type IN ('mrc', 'standard') OR p.project_category = 'MRC' THEN 1 ELSE 0 END), 0) AS mrc_projects,
+                COALESCE(SUM(CASE WHEN p.workflow_type = 'special_project' OR p.project_category = 'Special Project' THEN 1 ELSE 0 END), 0) AS special_projects,
+                COALESCE(SUM(CASE WHEN p.status IN ('Forwarded to OPS', 'Forwarded to Operations', 'Received by OPS') AND p.ops_processed_at IS NULL AND p.submitted_to_opfin_at IS NULL THEN 1 ELSE 0 END), 0) AS pending_processing,
+                COALESCE(SUM(CASE WHEN (p.status IN ('Under OPS Processing', 'Awaiting OPS Documents') OR (p.ops_processed_at IS NOT NULL AND (p.ops_final_sld_document_id IS NULL OR p.ops_final_bom_document_id IS NULL OR p.ops_request_pr_document_id IS NULL))) AND p.submitted_to_opfin_at IS NULL THEN 1 ELSE 0 END), 0) AS under_processing,
+                COALESCE(SUM(CASE WHEN (p.ops_final_sld_document_id IS NULL OR p.ops_final_bom_document_id IS NULL OR p.ops_request_pr_document_id IS NULL) AND p.submitted_to_opfin_at IS NULL THEN 1 ELSE 0 END), 0) AS missing_documents,
+                COALESCE(SUM(CASE WHEN (p.ops_final_sld_document_id IS NOT NULL AND p.ops_final_bom_document_id IS NOT NULL AND p.ops_request_pr_document_id IS NOT NULL) AND p.submitted_to_opfin_at IS NULL THEN 1 ELSE 0 END), 0) AS documents_complete,
+                COALESCE(SUM(CASE WHEN p.submitted_to_opfin_at IS NOT NULL OR p.status = 'Submitted to OPS Finance' THEN 1 ELSE 0 END), 0) AS submitted_to_opfin
+            FROM projects p
+            WHERE (p.forwarded_to_ops_at IS NOT NULL
+               OR p.current_department_id = :ops_dept_id
+               OR p.status IN ('Forwarded to OPS', 'Forwarded to Operations', 'Received by OPS', 'Under OPS Processing', 'Awaiting OPS Documents', 'OPS Documents Complete', 'Submitted to OPS Finance'))
+               {$categoryCondition}
+        ";
+
+        $stmt = Database::connection()->prepare($sql);
+        $stmt->execute($params);
+        $row = $stmt->fetch() ?: [];
+
+        return [
+            'total_received' => (int) ($row['total_received'] ?? 0),
+            'mrc_projects' => (int) ($row['mrc_projects'] ?? 0),
+            'special_projects' => (int) ($row['special_projects'] ?? 0),
+            'pending_processing' => (int) ($row['pending_processing'] ?? 0),
+            'under_processing' => (int) ($row['under_processing'] ?? 0),
+            'missing_documents' => (int) ($row['missing_documents'] ?? 0),
+            'documents_complete' => (int) ($row['documents_complete'] ?? 0),
+            'submitted_to_opfin' => (int) ($row['submitted_to_opfin'] ?? 0),
+        ];
+    }
+
+    /**
+     * Paginated Operations project list with search, status filtering, category filtering,
+     * date range filtering, and sorting.
+     *
+     * @param array<string, mixed> $filters
+     * @return array{items: list<array<string, mixed>>, total: int, page: int, per_page: int, total_pages: int}
+     */
+    public static function paginateOpsProjects(
+        int $opsDeptId,
+        array $filters = [],
+        int $page = 1,
+        int $perPage = 12
+    ): array {
+        $conditions = [
+            "(p.forwarded_to_ops_at IS NOT NULL OR p.current_department_id = :ops_dept_id OR p.status IN ('Forwarded to OPS', 'Forwarded to Operations', 'Received by OPS', 'Under OPS Processing', 'Awaiting OPS Documents', 'OPS Documents Complete', 'Submitted to OPS Finance'))",
+        ];
+        $params = ['ops_dept_id' => $opsDeptId];
+
+        // Search Keyword
+        $search = trim((string) ($filters['q'] ?? ''));
+        if ($search !== '') {
+            $conditions[] = '(p.project_code LIKE :q1 OR p.jom_number LIKE :q2 OR p.project_name LIKE :q3 OR p.client_name LIKE :q4)';
+            $like = '%' . $search . '%';
+            $params['q1'] = $like;
+            $params['q2'] = $like;
+            $params['q3'] = $like;
+            $params['q4'] = $like;
+        }
+
+        // Category Filter
+        $category = strtolower(trim((string) ($filters['category'] ?? '')));
+        if ($category === 'mrc') {
+            $conditions[] = "(p.workflow_type IN ('mrc', 'standard') OR p.project_category = 'MRC')";
+        } elseif ($category === 'special_project' || $category === 'special project') {
+            $conditions[] = "(p.workflow_type = 'special_project' OR p.project_category = 'Special Project')";
+        }
+
+        // Status Filter
+        $status = strtolower(trim((string) ($filters['status'] ?? '')));
+        if (in_array($status, ['incoming', 'received', 'pending'], true)) {
+            $conditions[] = "(p.status IN ('Forwarded to OPS', 'Forwarded to Operations', 'Received by OPS') AND p.ops_processed_at IS NULL AND p.submitted_to_opfin_at IS NULL)";
+        } elseif (in_array($status, ['processing', 'in_progress'], true)) {
+            $conditions[] = "((p.status IN ('Under OPS Processing', 'Awaiting OPS Documents') OR (p.ops_processed_at IS NOT NULL AND (p.ops_final_sld_document_id IS NULL OR p.ops_final_bom_document_id IS NULL OR p.ops_request_pr_document_id IS NULL))) AND p.submitted_to_opfin_at IS NULL)";
+        } elseif (in_array($status, ['missing_documents', 'missing_ops_documents'], true)) {
+            $conditions[] = "((p.ops_final_sld_document_id IS NULL OR p.ops_final_bom_document_id IS NULL OR p.ops_request_pr_document_id IS NULL) AND p.submitted_to_opfin_at IS NULL)";
+        } elseif (in_array($status, ['documents_complete', 'complete'], true)) {
+            $conditions[] = "(p.ops_final_sld_document_id IS NOT NULL AND p.ops_final_bom_document_id IS NOT NULL AND p.ops_request_pr_document_id IS NOT NULL AND p.submitted_to_opfin_at IS NULL)";
+        } elseif (in_array($status, ['submitted_opfin', 'submitted_to_ops_finance', 'submitted'], true)) {
+            $conditions[] = "(p.submitted_to_opfin_at IS NOT NULL OR p.status = 'Submitted to OPS Finance')";
+        } elseif ($status === 'history') {
+            $conditions[] = "(p.submitted_to_opfin_at IS NOT NULL OR p.forwarded_to_ops_at IS NOT NULL)";
+        }
+
+        // Date Range (forwarded_to_ops_at or ops_received_at)
+        $dateFrom = trim((string) ($filters['date_from'] ?? ''));
+        if ($dateFrom !== '') {
+            $conditions[] = 'DATE(COALESCE(p.forwarded_to_ops_at, p.ops_received_at, p.created_at)) >= :date_from';
+            $params['date_from'] = $dateFrom;
+        }
+
+        $dateTo = trim((string) ($filters['date_to'] ?? ''));
+        if ($dateTo !== '') {
+            $conditions[] = 'DATE(COALESCE(p.forwarded_to_ops_at, p.ops_received_at, p.created_at)) <= :date_to';
+            $params['date_to'] = $dateTo;
+        }
+
+        $whereSql = 'WHERE ' . implode(' AND ', $conditions);
+
+        // Count Total
+        $countSql = "SELECT COUNT(*) FROM projects p {$whereSql}";
+        $countStmt = Database::connection()->prepare($countSql);
+        $countStmt->execute($params);
+        $total = (int) $countStmt->fetchColumn();
+
+        // Sorting
+        $sort = strtolower(trim((string) ($filters['sort'] ?? 'received')));
+        $orderSql = match ($sort) {
+            'oldest' => 'ORDER BY COALESCE(p.forwarded_to_ops_at, p.ops_received_at, p.created_at) ASC, p.id ASC',
+            'name' => 'ORDER BY p.project_name ASC',
+            'code' => 'ORDER BY p.project_code ASC',
+            'status' => 'ORDER BY p.status ASC, p.id DESC',
+            default => 'ORDER BY COALESCE(p.forwarded_to_ops_at, p.ops_received_at, p.created_at) DESC, p.id DESC',
+        };
+
+        $totalPages = max(1, (int) ceil($total / $perPage));
+        $page = max(1, min($page, $totalPages));
+        $offset = ($page - 1) * $perPage;
+
+        $dataSql = self::BASE_SELECT . " {$whereSql} {$orderSql} LIMIT {$perPage} OFFSET {$offset}";
+        $dataStmt = Database::connection()->prepare($dataSql);
+        foreach ($params as $key => $val) {
+            $dataStmt->bindValue($key, $val);
+        }
+        $dataStmt->execute();
+
+        $items = $dataStmt->fetchAll();
+        foreach ($items as &$item) {
+            $cat = (string) ($item['project_category'] ?? $item['workflow_type'] ?? 'mrc');
+            $isSpecial = (strcasecmp($cat, 'Special Project') === 0 || strtolower($cat) === 'special_project');
+            $item['category_label'] = $isSpecial ? 'Special Project' : 'MRC';
+            $item['has_final_sld'] = !empty($item['ops_final_sld_document_id']);
+            $item['has_final_bom'] = !empty($item['ops_final_bom_document_id']);
+            $item['has_request_pr'] = !empty($item['ops_request_pr_document_id']);
+            $opsUploadedCount = ($item['has_final_sld'] ? 1 : 0) + ($item['has_final_bom'] ? 1 : 0) + ($item['has_request_pr'] ? 1 : 0);
+            $item['ops_uploaded_count'] = $opsUploadedCount;
+            $item['is_ops_complete'] = ($opsUploadedCount === 3);
+            $item['is_submitted_to_opfin'] = !empty($item['submitted_to_opfin_at']) || ($item['status'] === self::STATUS_SUBMITTED_TO_OPS_FINANCE);
+        }
+        unset($item);
+
+        return [
+            'items' => $items,
+            'total' => $total,
+            'page' => $page,
+            'per_page' => $perPage,
+            'total_pages' => $totalPages,
+        ];
+    }
+
+    /**
+     * Mark an OPS document uploaded and update OPS processing state.
+     */
+    public static function markOpsDocumentUploaded(
+        int $id,
+        string $column,
+        int $docId,
+        int $actorId
+    ): bool {
+        $validColumns = [
+            'ops_final_sld_document_id',
+            'ops_final_bom_document_id',
+            'ops_request_pr_document_id',
+        ];
+        if (!in_array($column, $validColumns, true)) {
+            return false;
+        }
+
+        $pdo = Database::connection();
+        $stmt = $pdo->prepare(
+            "UPDATE projects
+             SET {$column} = :doc_id,
+                 ops_received_at = COALESCE(ops_received_at, NOW()),
+                 ops_received_by = COALESCE(ops_received_by, :actor_id_rec),
+                 ops_processed_at = NOW(),
+                 updated_at = NOW()
+             WHERE id = :id"
+        );
+        $stmt->execute([
+            'doc_id' => $docId,
+            'actor_id_rec' => $actorId,
+            'id' => $id,
+        ]);
+
+        $chkStmt = $pdo->prepare(
+            "SELECT ops_final_sld_document_id, ops_final_bom_document_id, ops_request_pr_document_id, status, submitted_to_opfin_at
+             FROM projects
+             WHERE id = :id"
+        );
+        $chkStmt->execute(['id' => $id]);
+        $row = $chkStmt->fetch();
+
+        if ($row && empty($row['submitted_to_opfin_at'])) {
+            $hasSld = !empty($row['ops_final_sld_document_id']);
+            $hasBom = !empty($row['ops_final_bom_document_id']);
+            $hasPr = !empty($row['ops_request_pr_document_id']);
+
+            $newStatus = ($hasSld && $hasBom && $hasPr)
+                ? self::STATUS_OPS_DOCUMENTS_COMPLETE
+                : self::STATUS_UNDER_OPS_PROCESSING;
+
+            $upStatus = $pdo->prepare("UPDATE projects SET status = :status WHERE id = :id");
+            $upStatus->execute(['status' => $newStatus, 'id' => $id]);
+        }
+
+        return true;
+    }
+
+    /**
+     * Mark project submitted to Operations Finance.
+     */
+    public static function markSubmittedToOpsFinance(
+        int $id,
+        int $opfinDeptId,
+        int $actorId,
+        ?string $notes = null,
+        ?array $handoffSummary = null
+    ): bool {
+        $handoffJson = $handoffSummary !== null ? json_encode($handoffSummary, JSON_UNESCAPED_UNICODE) : null;
+        $stmt = Database::connection()->prepare(
+            'UPDATE projects
+             SET status = :status,
+                 current_department_id = :opfin_dept_id,
+                 submitted_to_opfin_at = NOW(),
+                 submitted_to_opfin_by = :actor_id,
+                 opfin_submission_notes = :notes,
+                 opfin_handoff_documents = :handoff_json,
+                 updated_at = NOW()
+             WHERE id = :id
+               AND submitted_to_opfin_at IS NULL'
+        );
+        $stmt->execute([
+            'status' => self::STATUS_SUBMITTED_TO_OPS_FINANCE,
+            'opfin_dept_id' => $opfinDeptId,
+            'actor_id' => $actorId,
+            'notes' => $notes !== null && trim($notes) !== '' ? trim($notes) : null,
+            'handoff_json' => $handoffJson,
+            'id' => $id,
+        ]);
+
+        return $stmt->rowCount() > 0;
     }
 
     /**

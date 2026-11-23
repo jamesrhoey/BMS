@@ -63,6 +63,12 @@ $router->post('/marketing/projects', [MarketingController::class, 'storeProject'
 
 $router->get('/pm/dashboard', [ProjectManagementController::class, 'dashboard'], [AuthMiddleware::class]);
 $router->get('/pm/projects', [ProjectManagementController::class, 'projects'], [AuthMiddleware::class]);
+$router->get('/pm/projects/{id}/verification', [ProjectManagementController::class, 'verification'], [AuthMiddleware::class]);
+$router->post('/pm/projects/{id}/verify-document', [ProjectManagementController::class, 'verifyDocument'], [AuthMiddleware::class]);
+$router->post('/pm/projects/{id}/upload-jom', [ProjectManagementController::class, 'uploadJom'], [AuthMiddleware::class]);
+$router->get('/pm/projects/{id}/forward-ops', [ProjectManagementController::class, 'showForwardOps'], [AuthMiddleware::class]);
+$router->post('/pm/projects/{id}/forward-ops', [ProjectManagementController::class, 'forwardToOps'], [AuthMiddleware::class]);
+$router->get('/pm/verification-history', [ProjectManagementController::class, 'verificationHistory'], [AuthMiddleware::class]);
 
 // Admin Finance Department Module Routes
 $router->get('/admin-finance/dashboard', [AdminFinanceController::class, 'dashboard'], [AuthMiddleware::class]);
@@ -71,6 +77,11 @@ $router->get('/admin-finance/projects', [AdminFinanceController::class, 'project
 // Operations Department Module Routes
 $router->get('/operations/dashboard', [OperationsController::class, 'dashboard'], [AuthMiddleware::class]);
 $router->get('/operations/projects', [OperationsController::class, 'projects'], [AuthMiddleware::class]);
+$router->get('/operations/projects/{id}', [OperationsController::class, 'show'], [AuthMiddleware::class]);
+$router->post('/operations/projects/{id}/upload-document', [OperationsController::class, 'uploadDocument'], [AuthMiddleware::class]);
+$router->get('/operations/projects/{id}/submit-opfin', [OperationsController::class, 'showSubmitOpfin'], [AuthMiddleware::class]);
+$router->post('/operations/projects/{id}/submit-opfin', [OperationsController::class, 'submitToOpfin'], [AuthMiddleware::class]);
+$router->get('/operations/history', [OperationsController::class, 'history'], [AuthMiddleware::class]);
 
 // OPS Finance Department Module Routes
 $router->get('/ops-finance/dashboard', [OpsFinanceController::class, 'dashboard'], [AuthMiddleware::class]);

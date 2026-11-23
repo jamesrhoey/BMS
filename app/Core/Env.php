@@ -14,11 +14,11 @@ final class Env
     {
         self::$loaded = true;
 
-        if (!is_file($filePath) || !is_readable($filePath)) {
+        if (!is_file($filePath) && !file_exists($filePath)) {
             return;
         }
 
-        $lines = file($filePath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+        $lines = @file($filePath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
         if ($lines === false) {
             return;
         }
