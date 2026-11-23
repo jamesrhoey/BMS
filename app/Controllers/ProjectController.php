@@ -194,6 +194,8 @@ final class ProjectController extends Controller
             'canCreatePo' => AuthorizationService::canCreatePurchaseOrder($user, $project, $purchaseRequest),
             'canAuthorizePo' => $activePo !== null && AuthorizationService::canAuthorizePurchaseOrder($user, $project, $activePo),
             'canIssuePo' => $activePo !== null && AuthorizationService::canIssuePurchaseOrder($user, $project, $activePo),
+            'supplierPurchaseOrder' => ProjectDocument::findCurrentByType($projectId, 'SUPPLIER_PO'),
+            'canUploadSupplierPurchaseOrder' => AuthorizationService::canUploadSupplierPurchaseOrder($user, $project),
             'canReceiveDelivery' => $activePo !== null && AuthorizationService::canReceiveSupplierDelivery($user, $project, $activePo),
             'canExecuteStockIn' => $activeDelivery !== null && AuthorizationService::canExecuteStockIn($user, $project, $activeDelivery),
             'operationsHandoffDocs' => ProjectDocument::operationsHandoffDocuments($projectId),

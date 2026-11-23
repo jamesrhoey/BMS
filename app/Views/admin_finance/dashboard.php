@@ -25,33 +25,33 @@ $jomRequiresConfirmation = (bool) ($jomConfig['requires_business_confirmation'] 
 <div class="row g-3 mb-4">
     <div class="col-6 col-xl-3">
         <div class="bms-stat-card">
-            <div class="bms-stat-label">Projects Awaiting JOM Issuance</div>
-            <div class="bms-stat-value text-primary"><?= (int) ($stats['awaiting_jom_issuance'] ?? 0) ?></div>
-            <div class="small text-secondary mt-1">Approved &amp; forwarded by PM</div>
+            <div class="bms-stat-label">Projects Awaiting Supplier PO</div>
+            <div class="bms-stat-value text-primary"><?= (int) ($stats['awaiting_supplier_po'] ?? 0) ?></div>
+            <div class="small text-secondary mt-1">Submitted by OPS Finance</div>
         </div>
     </div>
 
     <div class="col-6 col-xl-3">
         <div class="bms-stat-card">
-            <div class="bms-stat-label">Projects Under Admin Finance Review</div>
-            <div class="bms-stat-value text-warning"><?= (int) ($stats['under_admin_finance_review'] ?? 0) ?></div>
-            <div class="small text-secondary mt-1">Active Admin Finance review</div>
+            <div class="bms-stat-label">Supplier POs Issued</div>
+            <div class="bms-stat-value text-warning"><?= (int) ($stats['supplier_po_issued'] ?? 0) ?></div>
+            <div class="small text-secondary mt-1">Issued to suppliers</div>
         </div>
     </div>
 
     <div class="col-6 col-xl-3">
         <div class="bms-stat-card">
-            <div class="bms-stat-label">Projects With JOM Issued</div>
-            <div class="bms-stat-value text-success"><?= (int) ($stats['jom_issued'] ?? 0) ?></div>
-            <div class="small text-secondary mt-1">Awaiting handoff: <?= (int) ($stats['jom_issued_pending_ops'] ?? 0) ?></div>
+            <div class="bms-stat-label">OPS Finance Handoffs</div>
+            <div class="bms-stat-value text-success"><?= (int) ($stats['total_afin_projects'] ?? 0) ?></div>
+            <div class="small text-secondary mt-1">Final workflow submissions</div>
         </div>
     </div>
 
     <div class="col-6 col-xl-3">
         <div class="bms-stat-card">
-            <div class="bms-stat-label">Projects Forwarded to Operations</div>
-            <div class="bms-stat-value text-info"><?= (int) ($stats['forwarded_to_operations'] ?? 0) ?></div>
-            <div class="small text-secondary mt-1">JOM + SLD + Marketing BOM sent</div>
+            <div class="bms-stat-label">Final Workflow Stage</div>
+            <div class="bms-stat-value text-info">PO</div>
+            <div class="small text-secondary mt-1">Admin Finance issues supplier PO</div>
         </div>
     </div>
 </div>

@@ -12,6 +12,7 @@ use App\Core\Session;
 use App\Models\ActualBom;
 use App\Models\Department;
 use App\Models\Project;
+use App\Models\ProjectDocument;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseRequest;
 use App\Services\ActivityLogger;
@@ -19,6 +20,7 @@ use App\Services\ActualBomService;
 use App\Services\AuthorizationService;
 use App\Services\ProjectService;
 use App\Services\PurchaseOrderService;
+use App\Services\DocumentStorageService;
 
 final class AdminFinanceController extends Controller
 {
@@ -247,6 +249,41 @@ final class AdminFinanceController extends Controller
             "Actual BOM '{$abNum}' status updated to '{$newStatus}' by Admin Finance."
         );
         Response::redirect('/projects/' . $projectId . '#ops-finance-actual-bom-panel');
+    }
+
+    /**
+     * Upload the supplier Purchase Order after OPS Finance submits the project.
+     */
+    public function uploadSupplierPurchaseOrder(Request $request, array $params = []): void
+    {
+        $user = $this->requireAdminFinanceAccess($request);
+        $project = $this->loadProjectOrFail($params);
+        $projectId = (int) $project['id'];
+
+        if (!AuthorizationService::canUploadSupplierPurchaseOrder($user, $project)) {
+            $this->denyAccess(
+                $request,
+                "User '{$user['username']}' attempted to upload a supplier PO before the OPS Finance handoff or after one was already issued."
+            );
+        }
+
+        $result = DocumentStorageService::storeWorkflowDocument(
+            $project,
+            $request->file('supplier_po_file'),
+            'SUPPLIER_PO',
+            $user,
+            $request,
+            trim((string) $request->post('upload_notes', ''))
+        );
+
+        if (!$result['success']) {
+            Session::flash('error', $result['error'] ?? 'Unable to upload the supplier Purchase Order.');
+            Response::redirect('/projects/' . $projectId . '#supplier-po-panel');
+        }
+
+        Project::markSupplierPurchaseOrderIssued($projectId);
+        Session::flash('success', 'Supplier Purchase Order uploaded and issued successfully.');
+        Response::redirect('/projects/' . $projectId . '#supplier-po-panel');
     }
 
     /**

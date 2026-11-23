@@ -555,6 +555,24 @@ $userInitial = strtoupper((string) substr($userFullName !== '' ? $userFullName :
                 </div>
             </div>
         <?php elseif (!empty($isOpsFinanceUser)): ?>
+            <?php $opfinNav = (string) ($activeNav ?? ''); $opfinOpen = str_starts_with($opfinNav, 'opfin_'); ?>
+            <div class="bms-nav-group <?= $opfinOpen ? 'open' : '' ?>" data-nav-group="ops-finance">
+                <button type="button" class="bms-nav-dropdown-toggle <?= $opfinOpen ? 'active-parent' : '' ?>" data-nav-toggle="ops-finance" aria-expanded="<?= $opfinOpen ? 'true' : 'false' ?>" aria-controls="nav-group-ops-finance" title="OPS Finance">
+                    <span class="bms-nav-icon" aria-hidden="true"><?= bms_icon('briefcase', 18) ?></span><span class="bms-nav-label">OPS Finance</span><span class="bms-nav-chevron" aria-hidden="true"><?= bms_icon('chevron-down', 14) ?></span>
+                </button>
+                <div class="bms-subnav-menu" id="nav-group-ops-finance" role="region" aria-label="OPS Finance Submenu">
+                    <a href="<?= url('/ops-finance/dashboard') ?>" class="bms-subnav-link <?= $opfinNav === 'opfin_dashboard' ? 'active' : '' ?>"><span class="bms-subnav-bullet"></span><span class="bms-nav-label">Dashboard</span></a>
+                    <a href="<?= url('/ops-finance/projects') ?>" class="bms-subnav-link <?= $opfinNav === 'opfin_projects' ? 'active' : '' ?>"><span class="bms-subnav-bullet"></span><span class="bms-nav-label">Incoming Projects</span></a>
+                    <a href="<?= url('/ops-finance/projects?category=mrc') ?>" class="bms-subnav-link"><span class="bms-subnav-bullet"></span><span class="bms-nav-label">MRC Projects</span></a>
+                    <a href="<?= url('/ops-finance/projects?category=special_project') ?>" class="bms-subnav-link"><span class="bms-subnav-bullet"></span><span class="bms-nav-label">Special Projects</span></a>
+                    <a href="<?= url('/ops-finance/projects') ?>" class="bms-subnav-link"><span class="bms-subnav-bullet"></span><span class="bms-nav-label">Project Documents</span></a>
+                    <a href="<?= url('/ops-finance/projects?status=Awaiting PR') ?>" class="bms-subnav-link"><span class="bms-subnav-bullet"></span><span class="bms-nav-label">Pending PR Upload</span></a>
+                    <a href="<?= url('/ops-finance/projects?status=Awaiting Canvassing Sheets') ?>" class="bms-subnav-link"><span class="bms-subnav-bullet"></span><span class="bms-nav-label">Pending Canvassing Sheets</span></a>
+                    <a href="<?= url('/ops-finance/projects?status=Submitted to Admin Finance') ?>" class="bms-subnav-link"><span class="bms-subnav-bullet"></span><span class="bms-nav-label">Submitted to Admin Finance</span></a>
+                    <a href="<?= url('/ops-finance/history') ?>" class="bms-subnav-link <?= $opfinNav === 'opfin_history' ? 'active' : '' ?>"><span class="bms-subnav-bullet"></span><span class="bms-nav-label">Project History</span></a>
+                </div>
+            </div>
+        <?php elseif (!empty($isOpsFinanceUser) && false): ?>
             <?php
             // Resolve current OPS Finance filter states for deep-linking & auto-expansion
             $opfinQueryStr = (string) ($_SERVER['QUERY_STRING'] ?? '');
@@ -885,7 +903,7 @@ $userInitial = strtoupper((string) substr($userFullName !== '' ? $userFullName :
             </a>
         <?php endif; ?>
 
-        <?php if (!empty($canAccessIatms)): ?>
+        <?php if (!empty($canAccessIatms) && empty($isOpsFinanceUser)): ?>
             <?php
             $iatmsNav = (string) ($activeNav ?? '');
             $isIatmsFormsOpen = in_array($iatmsNav, ['iatms_stock_in', 'iatms_stock_in_create', 'iatms_stock_out', 'iatms_stock_out_create', 'iatms_ending_balance'], true);

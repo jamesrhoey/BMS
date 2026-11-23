@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Models\ActualBom;
 use App\Models\Department;
 use App\Models\Project;
+use App\Models\ProjectDocument;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseRequest;
 use App\Models\Role;
@@ -661,31 +662,10 @@ final class AuthorizationService
      */
     public static function canForwardToAdminFinance(?array $user, array $project): bool
     {
-        if ($user === null) {
-            return false;
-        }
-
-        if (!self::isAdmin($user) && !self::isProjectManagementUser($user)) {
-            return false;
-        }
-
-        if (!self::isAdmin($user) && !self::hasPermission($user, 'pm.projects.forward_afin')) {
-            return false;
-        }
-
-        if (Project::isForwardedToAdminFinance($project)) {
-            return false;
-        }
-
-        if (!Project::isApprovedByPm($project)) {
-            return false;
-        }
-
-        if (self::isAdmin($user)) {
-            return true;
-        }
-
-        return self::canViewProject($user, $project);
+        // The new workflow submits Marketing packages to PM and Admin Finance
+        // simultaneously. PM hands the approved category-specific package
+        // directly to Operations, so this legacy transition is disabled.
+        return false;
     }
 
     /**
@@ -747,22 +727,7 @@ final class AuthorizationService
      */
     public static function canStartAdminFinanceReview(?array $user, array $project): bool
     {
-        if ($user === null) {
-            return false;
-        }
-
-        if (!self::isAdmin($user) && !self::isAdminFinanceUser($user)) {
-            return false;
-        }
-
-        if (!empty($project['jom_number']) || Project::isForwardedToOperations($project)) {
-            return false;
-        }
-
-        $status = (string) ($project['status'] ?? '');
-
-        return $status === Project::STATUS_FORWARDED_TO_ADMIN_FINANCE
-            || (!empty($project['forwarded_to_afin_at']) && $status !== Project::STATUS_UNDER_ADMIN_FINANCE_REVIEW);
+        return false;
     }
 
     /**
@@ -776,26 +741,7 @@ final class AuthorizationService
      */
     public static function canIssueJomNumber(?array $user, array $project): bool
     {
-        if ($user === null) {
-            return false;
-        }
-
-        // Explicitly block Project Management, Marketing, Operations, Logistics, and Operation Finance users
-        if (!self::isAdmin($user) && !self::isAdminFinanceUser($user)) {
-            return false;
-        }
-
-        if (!self::isAdmin($user) && !self::hasPermission($user, 'afin.projects.jom_issue')) {
-            return false;
-        }
-
-        // Cannot issue if project already has a JOM number
-        if (!empty($project['jom_number'])) {
-            return false;
-        }
-
-        // Project must have been approved and forwarded by Project Management to Admin Finance
-        return Project::isApprovedByPm($project) && Project::isForwardedToAdminFinance($project);
+        return false;
     }
 
     /**
@@ -808,23 +754,17 @@ final class AuthorizationService
      */
     public static function canForwardToOperations(?array $user, array $project): bool
     {
-        if ($user === null) {
+        return false;
+    }
+
+    public static function canUploadSupplierPurchaseOrder(?array $user, array $project): bool
+    {
+        if ($user === null || (!self::isAdmin($user) && !self::isAdminFinanceUser($user))) {
             return false;
         }
 
-        if (!self::isAdmin($user) && !self::isAdminFinanceUser($user)) {
-            return false;
-        }
-
-        if (!self::isAdmin($user) && !self::hasPermission($user, 'afin.projects.forward_ops')) {
-            return false;
-        }
-
-        if (Project::isForwardedToOperations($project)) {
-            return false;
-        }
-
-        return !empty($project['jom_number']);
+        return !empty($project['opfin_submitted_to_afin_at'])
+            && ProjectDocument::findCurrentByType((int) $project['id'], 'SUPPLIER_PO') === null;
     }
 
     /**

@@ -163,7 +163,7 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
             <div class="bg-white rounded border border-success border-opacity-25 p-3 small text-dark mb-2" style="white-space: pre-line;"><?= e($project['forwarded_to_ops_notes']) ?></div>
         <?php endif; ?>
         <div class="small text-secondary">
-            Admin Finance has issued JOM Number <strong><?= e($project['jom_number'] ?: 'N/A') ?></strong> and forwarded the <strong>1. JOM Number</strong>, <strong>2. Single Line Diagram (SLD)</strong>, and <strong>3. Marketing BOM</strong> to the <strong>Operations</strong> incoming queue.
+            The approved category-specific handoff package has been received by the <strong>Operations</strong> incoming queue.
         </div>
     </div>
 <?php elseif ($status === 'Forwarded to Admin Finance' || !empty($project['forwarded_to_afin_at']) || $verificationStatus === 'forwarded_to_admin_finance'): ?>
@@ -187,7 +187,7 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
             <div class="bg-white rounded border border-info border-opacity-25 p-3 small text-dark mb-2" style="white-space: pre-line;"><?= e($project['forwarded_to_afin_notes']) ?></div>
         <?php endif; ?>
         <div class="small text-secondary">
-            Project documents have been verified and approved by Project Management and routed to the <strong>Admin Finance</strong> incoming queue. Admin Finance is responsible for issuing the official JOM number and forwarding required documents before the project proceeds to Operations.
+            This is a legacy Admin Finance handoff record. New projects are submitted to Admin Finance simultaneously by Marketing, while Project Management forwards the approved category-specific package directly to <strong>Operations</strong>.
         </div>
     </div>
 <?php elseif (in_array($status, ['Approved by Project Management', 'Document Verification Completed'], true) || in_array($verificationStatus, ['approved_by_pm', 'verified_complete'], true)): ?>
@@ -209,10 +209,10 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
             <div class="bg-white rounded border border-success border-opacity-25 p-3 small text-dark mb-2" style="white-space: pre-line;"><?= e($project['verification_notes']) ?></div>
         <?php endif; ?>
         <div class="small text-secondary">
-            All required Marketing checklist documents are verified complete and readable by Project Management. Project Management does not issue JOM numbers; the approved project must be forwarded to <strong>Admin Finance</strong> for JOM number assignment.
-            <?php if (!empty($canForwardToAdminFinance)): ?>
+            All required Marketing checklist documents are verified complete and readable by Project Management. Upload the official JOM file, then forward the category-specific package to <strong>Operations</strong>.
+            <?php if (!empty($canPmForwardToOps)): ?>
                 <div class="mt-2 fw-semibold text-primary">
-                    Ready for Next Stage: Use the <strong>Forward to Admin Finance</strong> action below to route this project to Admin Finance.
+                    Ready for Next Stage: Use the <strong>Forward to Operations</strong> action below.
                 </div>
             <?php endif; ?>
         </div>
@@ -647,13 +647,6 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
                     </div>
                 </form>
             </div>
-        <?php elseif (in_array($status, ['Submitted to Project Management and Admin Finance', 'Resubmitted to Project Management and Admin Finance', 'Submitted for Document Verification', 'Submitted for Verification', 'Resubmitted for Verification', 'Submitted', 'Under Project Management Review'], true)): ?>
-            <div id="submission-panel" class="bms-card p-4 mb-4 border-start border-4 border-primary">
-                <h3 class="h6 fw-bold mb-1">Queued with Project Management &amp; Admin Finance</h3>
-                <p class="small text-secondary mb-0">
-                    This project has been submitted simultaneously to Project Management and Admin Finance. Marketing edits and document replacements are locked during review. If revisions are requested, the project will be returned to Marketing with correction notes.
-                </p>
-            </div>
         <?php endif; ?>
 
         <!-- Project Management Document Verification & Handoff Panel -->
@@ -661,13 +654,13 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
         $isForwardedToAfin = $status === 'Forwarded to Admin Finance' || !empty($project['forwarded_to_afin_at']) || $verificationStatus === 'forwarded_to_admin_finance';
         $isPmApprovedStage = in_array($status, ['Approved by Project Management', 'Document Verification Completed'], true) || in_array($verificationStatus, ['approved_by_pm', 'verified_complete'], true);
         ?>
-        <?php if (!empty($canCompleteVerification) || !empty($canReturnToMarketing) || !empty($canStartReview) || !empty($canForwardToAdminFinance) || $isForwardedToAfin || $isPmApprovedStage): ?>
+        <?php if (!empty($canCompleteVerification) || !empty($canReturnToMarketing) || !empty($canStartReview) || $isForwardedToAfin || $isPmApprovedStage): ?>
             <div id="pm-review-panel" class="bms-card p-4 mb-4 border-start border-4 border-primary">
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
                     <div>
                         <h3 class="h6 fw-bold mb-0">Project Management Document Verification &amp; Handoff</h3>
                         <div class="text-secondary small">
-                            Inspect submitted Marketing documents, record verification decisions, return incomplete packages, or forward approved projects to Admin Finance.
+                            Inspect submitted Marketing documents, record verification decisions, return incomplete packages, upload the JOM file, or forward the approved category-specific package to Operations.
                         </div>
                     </div>
                     <div class="d-flex flex-wrap align-items-center gap-1">
@@ -702,39 +695,7 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
                     </div>
                 </div>
 
-                <!-- Action: Forward Approved Project to Admin Finance -->
-                <?php if (!empty($canForwardToAdminFinance)): ?>
-                    <div class="p-4 rounded border mb-4 bg-white border-primary border-opacity-75 shadow-sm">
-                        <div class="fw-bold text-primary fs-6 mb-1">
-                            &rarr; Forward Approved Project to Admin Finance
-                        </div>
-                        <div class="text-secondary small mb-3">
-                            Project Management verification is complete. Forward this approved project to <strong>Admin Finance</strong> so it appears in the Admin Finance incoming queue for JOM number assignment.
-                        </div>
-                        <form
-                            method="POST"
-                            action="<?= url('/projects/' . $projectId . '/forward-to-admin-finance') ?>"
-                            data-confirm="Forward approved project '<?= e($project['project_code']) ?>' to Admin Finance?"
-                            class="m-0"
-                        >
-                            <?= csrf_field() ?>
-                            <div class="mb-3">
-                                <label for="forward_notes" class="form-label small fw-semibold mb-1">Handoff Notes for Admin Finance (Optional)</label>
-                                <textarea
-                                    id="forward_notes"
-                                    name="forward_notes"
-                                    rows="2"
-                                    maxlength="2000"
-                                    class="form-control form-control-sm"
-                                    placeholder="All 6 required Marketing documents verified complete and approved for Admin Finance processing..."
-                                ></textarea>
-                            </div>
-                            <button type="submit" class="btn btn-primary fw-semibold w-100">
-                                Forward to Admin Finance
-                            </button>
-                        </form>
-                    </div>
-                <?php elseif ($isForwardedToAfin): ?>
+                <?php if ($isForwardedToAfin): ?>
                     <div class="p-3 rounded border mb-4 bg-light border-info">
                         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
                             <div>
@@ -748,11 +709,11 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
                                     <?php if (!empty($project['forwarded_to_afin_at'])): ?>
                                         on <?= format_datetime((string) $project['forwarded_to_afin_at']) ?>
                                     <?php endif; ?>
-                                    &bull; Project is in the Admin Finance incoming queue awaiting JOM issuance before Operations.
+                                    &bull; New projects use the simultaneous Marketing submission to Admin Finance; PM does not forward projects to that queue.
                                 </div>
                             </div>
                             <div>
-                                <button type="button" class="btn btn-secondary btn-sm" disabled>Forwarded to Admin Finance</button>
+                                <span class="badge bg-secondary">Legacy handoff record</span>
                             </div>
                         </div>
                     </div>
@@ -822,7 +783,7 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
                                     </form>
                                 </div>
                                 <div class="small text-secondary mt-3 pt-2 border-top" style="font-size: 0.72rem;">
-                                    Approves document verification only. Does not issue a JOM number (Admin Finance issues the JOM number after PM forwards the project).
+                                    Approves document verification only. After approval, upload the JOM file and forward the category-specific package to Operations.
                                 </div>
                             </div>
                         </div>
@@ -1191,19 +1152,6 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
             </div>
         <?php endif; ?>
         <?php if ($isForwardedToOps || !empty($isOperationsUser)): ?>
-            <div class="alert alert-primary d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4 shadow-sm border-primary">
-                <div class="d-flex align-items-center gap-2">
-                    <span class="fs-4 text-primary"><i class="bi bi-gear-fill"></i></span>
-                    <div>
-                        <div class="fw-bold text-dark">Operations Department Workspace Available</div>
-                        <div class="text-secondary small">Access the official Operations workspace to review handoff documents, upload Final SLD, Final BOM, and Request of PR.</div>
-                    </div>
-                </div>
-                <a href="<?= url('/operations/projects/' . $projectId) ?>" class="btn btn-primary btn-sm fw-bold">
-                    Open Operations Workspace &rarr;
-                </a>
-            </div>
-
             <!-- Operations Handoff Package (JOM Number, SLD & Marketing BOM) -->
             <div id="operations-handoff-package" class="bms-card p-4 mb-4 border-start border-4 border-info">
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
@@ -2354,6 +2302,36 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
                     </div>
                 <?php endif; ?>
             </div>
+        <?php endif; ?>
+
+        <!-- Final workflow handoff: Admin Finance supplier Purchase Order -->
+        <?php if (!empty($supplierPurchaseOrder) || !empty($canUploadSupplierPurchaseOrder)): ?>
+        <div id="supplier-po-panel" class="bms-card p-4 mb-4 border-start border-4 border-success">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+                <h3 class="h6 fw-bold mb-0">Supplier Purchase Order</h3>
+                <?php if (!empty($supplierPurchaseOrder)): ?>
+                    <span class="badge bg-success">Issued to Supplier</span>
+                <?php else: ?>
+                    <span class="badge bg-warning text-dark">Awaiting Admin Finance</span>
+                <?php endif; ?>
+            </div>
+            <?php if (!empty($supplierPurchaseOrder)): ?>
+                <div class="small">
+                    <a href="<?= url('/projects/' . $projectId . '/documents/' . (int) $supplierPurchaseOrder['id'] . '/view') ?>" target="_blank">
+                        <?= e($supplierPurchaseOrder['original_filename']) ?>
+                    </a>
+                    <span class="text-secondary ms-2">v<?= (int) ($supplierPurchaseOrder['version_number'] ?? 1) ?> · <?= format_datetime($supplierPurchaseOrder['created_at'] ?? null) ?></span>
+                </div>
+            <?php elseif (!empty($canUploadSupplierPurchaseOrder)): ?>
+                <p class="small text-secondary">OPS Finance has submitted this project with PR and Canvassing Sheets. Upload the Purchase Order issued to the supplier.</p>
+                <form method="POST" action="<?= url('/admin-finance/projects/' . $projectId . '/supplier-po') ?>" enctype="multipart/form-data">
+                    <?= csrf_field() ?>
+                    <input type="file" name="supplier_po_file" class="form-control form-control-sm mb-2" accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png" required>
+                    <input type="text" name="upload_notes" class="form-control form-control-sm mb-2" maxlength="255" placeholder="Optional issue notes">
+                    <button type="submit" class="btn btn-success btn-sm fw-semibold">Upload &amp; Issue to Supplier</button>
+                </form>
+            <?php endif; ?>
+        </div>
         <?php endif; ?>
 
         <!-- Phase 3: Purchase Order (PO) & Terms of Payment Panel -->

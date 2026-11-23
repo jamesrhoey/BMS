@@ -37,6 +37,9 @@ final class DocumentStorageService
         'Request of PR — Purchase Requisition Request',
         'Request of PR',
         'REQUEST_OF_PR',
+        'PR',
+        'CANVASSING_SHEETS',
+        'SUPPLIER_PO',
         'JOM — Job Order Memorandum',
         'JOM',
     ];
@@ -216,7 +219,9 @@ final class DocumentStorageService
 
         $actorId = (int) $actor['id'];
         $isChecklistDoc = in_array($documentType, $checklistTypes, true);
-        $isVersionedDoc = $isChecklistDoc || $isWorkflowDoc;
+        // PR is replaceable with version history. Canvassing sheets are an
+        // append-only document set: each upload remains a separate record.
+        $isVersionedDoc = ($isChecklistDoc || $isWorkflowDoc) && $documentType !== 'CANVASSING_SHEETS';
 
         try {
             $outcome = Database::transaction(static function () use (

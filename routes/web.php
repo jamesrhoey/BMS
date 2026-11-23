@@ -73,6 +73,7 @@ $router->get('/pm/verification-history', [ProjectManagementController::class, 'v
 // Admin Finance Department Module Routes
 $router->get('/admin-finance/dashboard', [AdminFinanceController::class, 'dashboard'], [AuthMiddleware::class]);
 $router->get('/admin-finance/projects', [AdminFinanceController::class, 'projects'], [AuthMiddleware::class]);
+$router->post('/admin-finance/projects/{id}/supplier-po', [AdminFinanceController::class, 'uploadSupplierPurchaseOrder'], [AuthMiddleware::class]);
 
 // Operations Department Module Routes
 $router->get('/operations/dashboard', [OperationsController::class, 'dashboard'], [AuthMiddleware::class]);
@@ -84,8 +85,12 @@ $router->post('/operations/projects/{id}/submit-opfin', [OperationsController::c
 $router->get('/operations/history', [OperationsController::class, 'history'], [AuthMiddleware::class]);
 
 // OPS Finance Department Module Routes
-$router->get('/ops-finance/dashboard', [OpsFinanceController::class, 'dashboard'], [AuthMiddleware::class]);
-$router->get('/ops-finance/projects', [OpsFinanceController::class, 'projects'], [AuthMiddleware::class]);
+$router->get('/ops-finance/dashboard', [OpsFinanceController::class, 'workflowDashboard'], [AuthMiddleware::class]);
+$router->get('/ops-finance/projects', [OpsFinanceController::class, 'workflowProjects'], [AuthMiddleware::class]);
+$router->get('/ops-finance/projects/{id}', [OpsFinanceController::class, 'workflowShow'], [AuthMiddleware::class]);
+$router->post('/ops-finance/projects/{id}/documents', [OpsFinanceController::class, 'uploadFinanceDocument'], [AuthMiddleware::class]);
+$router->post('/ops-finance/projects/{id}/submit-admin-finance', [OpsFinanceController::class, 'submitToAdminFinance'], [AuthMiddleware::class]);
+$router->get('/ops-finance/history', [OpsFinanceController::class, 'workflowHistory'], [AuthMiddleware::class]);
 
 // Administrator-Only User Management Routes
 $adminMiddleware = [

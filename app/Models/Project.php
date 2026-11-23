@@ -38,6 +38,13 @@ final class Project
     public const STATUS_AWAITING_OPS_DOCUMENTS = 'Awaiting OPS Documents';
     public const STATUS_OPS_DOCUMENTS_COMPLETE = 'OPS Documents Complete';
     public const STATUS_SUBMITTED_TO_OPS_FINANCE = 'Submitted to OPS Finance';
+    public const STATUS_RECEIVED_BY_OPS_FINANCE = 'Received by OPS Finance';
+    public const STATUS_UNDER_OPS_FINANCE_PROCESSING = 'Under OPS Finance Processing';
+    public const STATUS_AWAITING_PR = 'Awaiting PR';
+    public const STATUS_AWAITING_CANVASSING_SHEETS = 'Awaiting Canvassing Sheets';
+    public const STATUS_OPS_FINANCE_DOCUMENTS_COMPLETE = 'OPS Finance Documents Complete';
+    public const STATUS_SUBMITTED_TO_ADMIN_FINANCE = 'Submitted to Admin Finance';
+    public const STATUS_SUPPLIER_PO_ISSUED = 'Purchase Order Issued to Supplier';
     public const STATUS_PR_BEING_PREPARED = 'PR Being Prepared';
     public const STATUS_PR_SUBMITTED_TO_OPS_FINANCE = 'PR Submitted to OPS Finance';
     public const STATUS_ACTUAL_BOM_PENDING_UPLOAD = 'Actual BOM Pending Upload';
@@ -124,6 +131,11 @@ final class Project
             p.submitted_to_opfin_by,
             p.opfin_submission_notes,
             p.opfin_handoff_documents,
+            p.opfin_received_at,
+            p.opfin_received_by,
+            p.opfin_submitted_to_afin_at,
+            p.opfin_submitted_to_afin_by,
+            p.opfin_afin_handoff_documents,
             p.created_at,
             p.updated_at,
             d.department_name AS current_department_name,
@@ -143,6 +155,8 @@ final class Project
             opsfwdu.full_name AS forwarded_to_ops_by_name,
             opsrecu.full_name AS ops_receiver_name,
             opfinsubu.full_name AS submitted_to_opfin_by_name,
+            opfinrecv.full_name AS opfin_received_by_name,
+            opfinafin.full_name AS opfin_submitted_to_afin_by_name,
             jomu.full_name AS jom_issuer_name,
             jomupu.full_name AS jom_uploader_name,
             (SELECT COUNT(*) FROM project_documents pd WHERE pd.project_id = p.id AND pd.is_current = 1) AS document_count
@@ -160,6 +174,8 @@ final class Project
         LEFT JOIN users opsfwdu ON opsfwdu.id = p.forwarded_to_ops_by
         LEFT JOIN users opsrecu ON opsrecu.id = p.ops_received_by
         LEFT JOIN users opfinsubu ON opfinsubu.id = p.submitted_to_opfin_by
+        LEFT JOIN users opfinrecv ON opfinrecv.id = p.opfin_received_by
+        LEFT JOIN users opfinafin ON opfinafin.id = p.opfin_submitted_to_afin_by
         LEFT JOIN users jomu ON jomu.id = p.jom_issued_by
         LEFT JOIN users jomupu ON jomupu.id = p.jom_uploaded_by
     ';
@@ -197,6 +213,13 @@ final class Project
             self::STATUS_AWAITING_OPS_DOCUMENTS,
             self::STATUS_OPS_DOCUMENTS_COMPLETE,
             self::STATUS_SUBMITTED_TO_OPS_FINANCE,
+            self::STATUS_RECEIVED_BY_OPS_FINANCE,
+            self::STATUS_UNDER_OPS_FINANCE_PROCESSING,
+            self::STATUS_AWAITING_PR,
+            self::STATUS_AWAITING_CANVASSING_SHEETS,
+            self::STATUS_OPS_FINANCE_DOCUMENTS_COMPLETE,
+            self::STATUS_SUBMITTED_TO_ADMIN_FINANCE,
+            self::STATUS_SUPPLIER_PO_ISSUED,
             self::STATUS_PR_BEING_PREPARED,
             self::STATUS_PR_SUBMITTED_TO_OPS_FINANCE,
             self::STATUS_ACTUAL_BOM_PENDING_UPLOAD,
@@ -1190,14 +1213,12 @@ final class Project
     {
         $stmt = Database::connection()->prepare(
             self::BASE_SELECT . "
-            WHERE p.current_department_id = :afin_dept_id
-               OR p.status IN ('Forwarded to Admin Finance', 'Under Admin Finance Review', 'JOM Issued', 'JOM Number Issued', 'Forwarded to Operations')
-               OR p.verification_status IN ('forwarded_to_admin_finance', 'under_admin_finance_review', 'jom_issued', 'forwarded_to_operations')
-               OR p.forwarded_to_afin_at IS NOT NULL
+            WHERE p.opfin_submitted_to_afin_at IS NOT NULL
+               OR p.status IN ('Actual BOM Submitted to Admin Finance', 'Actual BOM Under Admin Finance Review', 'Actual BOM Returned for Corrections', 'Actual BOM Accepted by Admin Finance')
+               OR p.id IN (SELECT po_sub.project_id FROM purchase_orders po_sub)
             ORDER BY COALESCE(p.forwarded_to_afin_at, p.updated_at) DESC, p.id DESC
             LIMIT :limit_rows"
         );
-        $stmt->bindValue(':afin_dept_id', $afinDeptId, PDO::PARAM_INT);
         $stmt->bindValue(':limit_rows', max(1, $limit), PDO::PARAM_INT);
         $stmt->execute();
 
@@ -1220,19 +1241,20 @@ final class Project
         $sql = "
             SELECT
                 COUNT(*) AS total_afin_projects,
-                COALESCE(SUM(CASE WHEN p.jom_number IS NULL AND p.status IN ('Forwarded to Admin Finance', 'Under Admin Finance Review') THEN 1 ELSE 0 END), 0) AS awaiting_jom_issuance,
-                COALESCE(SUM(CASE WHEN p.status = 'Under Admin Finance Review' THEN 1 ELSE 0 END), 0) AS under_afin_review,
-                COALESCE(SUM(CASE WHEN p.jom_number IS NOT NULL OR p.status IN ('JOM Issued', 'JOM Number Issued', 'Forwarded to Operations') THEN 1 ELSE 0 END), 0) AS jom_issued,
-                COALESCE(SUM(CASE WHEN p.status = 'Forwarded to Operations' OR p.forwarded_to_ops_at IS NOT NULL THEN 1 ELSE 0 END), 0) AS forwarded_to_operations
+                COALESCE(SUM(CASE WHEN p.opfin_submitted_to_afin_at IS NOT NULL AND p.status <> 'Purchase Order Issued to Supplier' THEN 1 ELSE 0 END), 0) AS awaiting_supplier_po,
+                COALESCE(SUM(CASE WHEN p.status = 'Purchase Order Issued to Supplier' THEN 1 ELSE 0 END), 0) AS supplier_po_issued,
+                0 AS awaiting_jom_issuance,
+                0 AS under_afin_review,
+                0 AS jom_issued,
+                0 AS forwarded_to_operations
             FROM projects p
-            WHERE p.current_department_id = :afin_dept_id
-               OR p.status IN ('Forwarded to Admin Finance', 'Under Admin Finance Review', 'JOM Issued', 'JOM Number Issued', 'Forwarded to Operations')
-               OR p.verification_status IN ('forwarded_to_admin_finance', 'under_admin_finance_review', 'jom_issued', 'forwarded_to_operations')
-               OR p.forwarded_to_afin_at IS NOT NULL
+            WHERE p.opfin_submitted_to_afin_at IS NOT NULL
+               OR p.status IN ('Actual BOM Submitted to Admin Finance', 'Actual BOM Under Admin Finance Review', 'Actual BOM Returned for Corrections', 'Actual BOM Accepted by Admin Finance')
+               OR p.id IN (SELECT po_sub.project_id FROM purchase_orders po_sub)
         ";
 
         $stmt = Database::connection()->prepare($sql);
-        $stmt->execute(['afin_dept_id' => $afinDeptId]);
+        $stmt->execute();
         $row = $stmt->fetch() ?: [];
 
         return [
@@ -1262,7 +1284,7 @@ final class Project
               OR p.verification_status IN ('forwarded_to_admin_finance', 'under_admin_finance_review', 'jom_issued', 'forwarded_to_operations')
               OR p.forwarded_to_afin_at IS NOT NULL)",
         ];
-        $params = ['afin_dept_id' => $afinDeptId];
+        $params = [];
 
         $search = trim((string) ($filters['q'] ?? ''));
         if ($search !== '') {
@@ -1275,7 +1297,11 @@ final class Project
         }
 
         $status = trim((string) ($filters['status'] ?? ''));
-        if ($status === 'incoming_approved') {
+        if ($status === 'awaiting_supplier_po') {
+            $conditions[] = "p.opfin_submitted_to_afin_at IS NOT NULL AND p.status <> 'Purchase Order Issued to Supplier'";
+        } elseif ($status === 'supplier_po_issued') {
+            $conditions[] = "p.status = 'Purchase Order Issued to Supplier'";
+        } elseif ($status === 'incoming_approved') {
             $conditions[] = "(p.status = 'Forwarded to Admin Finance' AND p.jom_number IS NULL)";
         } elseif ($status === 'awaiting_jom' || $status === 'awaiting') {
             $conditions[] = "(p.jom_number IS NULL AND p.status IN ('Forwarded to Admin Finance', 'Under Admin Finance Review'))";
@@ -1396,11 +1422,11 @@ final class Project
      *   jom_issued: int
      * }
      */
-    public static function pmDashboardStats(int $pmDeptId, string $categoryFilter = ''): array
+    public static function pmDashboardStats(int $pmDeptId, ?string $categoryFilter = ''): array
     {
         $params = ['pm_dept_id' => $pmDeptId];
         $categoryCondition = '';
-        $normalizedCat = strtolower(trim($categoryFilter));
+        $normalizedCat = strtolower(trim((string) $categoryFilter));
         if ($normalizedCat === 'mrc') {
             $categoryCondition = " AND (p.workflow_type IN ('mrc', 'standard') OR p.project_category = 'MRC')";
         } elseif ($normalizedCat === 'special_project' || $normalizedCat === 'special project') {
@@ -1669,6 +1695,7 @@ final class Project
                  verification_status = :verification_status,
                  forwarded_to_ops_by = :forwarded_by,
                  forwarded_to_ops_at = NOW(),
+                 ops_received_at = COALESCE(ops_received_at, NOW()),
                  forwarded_to_ops_notes = :forwarded_notes,
                  ops_jom_document_id = :jom_doc_id,
                  ops_son_document_id = :son_doc_id,
@@ -1950,6 +1977,7 @@ final class Project
                  current_department_id = :opfin_dept_id,
                  submitted_to_opfin_at = NOW(),
                  submitted_to_opfin_by = :actor_id,
+                 opfin_received_at = COALESCE(opfin_received_at, NOW()),
                  opfin_submission_notes = :notes,
                  opfin_handoff_documents = :handoff_json,
                  updated_at = NOW()
@@ -1966,6 +1994,14 @@ final class Project
         ]);
 
         return $stmt->rowCount() > 0;
+    }
+
+    public static function markSupplierPurchaseOrderIssued(int $id): void
+    {
+        $stmt = Database::connection()->prepare(
+            'UPDATE projects SET status = :status, updated_at = NOW() WHERE id = :id'
+        );
+        $stmt->execute(['status' => self::STATUS_SUPPLIER_PO_ISSUED, 'id' => $id]);
     }
 
     /**

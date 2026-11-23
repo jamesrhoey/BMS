@@ -33,7 +33,9 @@ final class ProjectManagementController extends Controller
         $pmDeptId = (int) $pmDept['id'];
         $category = (string) $request->query('category', '');
 
-        $stats = Project::pmDashboardStats($pmDeptId, $category !== '' ? $category : null);
+        // pmDashboardStats expects a string; an omitted category is represented
+        // by the empty string so the unfiltered dashboard remains valid.
+        $stats = Project::pmDashboardStats($pmDeptId, $category);
 
         $pageRaw = (string) $request->query('page', '1');
         $page = ctype_digit($pageRaw) ? max(1, (int) $pageRaw) : 1;
@@ -372,7 +374,7 @@ final class ProjectManagementController extends Controller
 
         Session::flash(
             'success',
-            "Project '{$project['project_code']}' has been Approved by Project Management. All required documents have been verified. You may now forward the project to Admin Finance."
+            "Project '{$project['project_code']}' has been Approved by Project Management. All required documents have been verified. You may now upload the JOM file and forward the category-specific package to Operations."
         );
         Response::redirect('/projects/' . (int) $project['id']);
     }

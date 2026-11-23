@@ -20,7 +20,7 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
 
 <div class="bms-table-panel">
     <form method="GET" action="<?= url('/admin-finance/projects') ?>" class="bms-table-toolbar">
-        <h3 class="h6 fw-bold mb-0 me-auto">Admin Finance Incoming Projects &amp; JOM Issuance Registry</h3>
+        <h3 class="h6 fw-bold mb-0 me-auto">Admin Finance Incoming Projects &amp; Supplier PO Registry</h3>
 
         <select id="status" name="status" class="form-select form-select-sm bms-toolbar-select" aria-label="Filter by Admin Finance status">
             <option value="">All Incoming Projects</option>
@@ -72,8 +72,8 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
                     <th style="width: 13%; min-width: 120px;">Client / End User</th>
                     <th style="width: 11%; min-width: 105px;">Project Identifier</th>
                     <th style="width: 12%; min-width: 115px;">PM Approval Date</th>
-                    <th style="width: 16%; min-width: 140px;">JOM Status</th>
-                    <th style="width: 10%; min-width: 95px;">Assigned JOM</th>
+                    <th style="width: 16%; min-width: 140px;">Supplier PO Status</th>
+                    <th style="width: 10%; min-width: 95px;">OPS Finance Handoff</th>
                     <th style="width: 10%; min-width: 95px;">Submitted By</th>
                     <th class="text-end" style="width: 8%; min-width: 80px;">Available Actions</th>
                 </tr>
@@ -92,9 +92,9 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
                         $pStatus = (string) ($proj['status'] ?? '');
                         $hasJom = !empty($proj['jom_number']);
                         $isForwardedOps = !empty($proj['forwarded_to_ops_at']) || $pStatus === 'Forwarded to Operations';
-                        $canStartAfinReview = !$hasJom && !$isForwardedOps && $pStatus === 'Forwarded to Admin Finance';
-                        $canIssueJom = !$hasJom && !$isForwardedOps;
-                        $canForwardOps = $hasJom && !$isForwardedOps;
+                        $canStartAfinReview = false;
+                        $canIssueJom = false;
+                        $canForwardOps = false;
 
                         if ($isForwardedOps) {
                             $jomStatusLabel = 'Forwarded to Operations';

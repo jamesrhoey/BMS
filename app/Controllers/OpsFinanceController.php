@@ -15,9 +15,79 @@ use App\Models\PurchaseRequest;
 use App\Services\ActualBomService;
 use App\Services\AuthorizationService;
 use App\Services\PurchaseRequestService;
+use App\Services\OpsFinanceWorkflowService;
 
 final class OpsFinanceController extends Controller
 {
+    public function workflowDashboard(Request $request, array $params = []): void
+    {
+        $this->requireOpsFinanceAccess($request);
+        $filters = $this->workflowFilters($request);
+        $this->render('ops_finance/workflow_dashboard', [
+            'pageTitle' => 'OPS Finance Dashboard', 'activeNav' => 'opfin_dashboard',
+            'stats' => OpsFinanceWorkflowService::stats(), 'filters' => $filters,
+            'queue' => OpsFinanceWorkflowService::paginate($filters, $this->page($request), 12)['items'],
+        ]);
+    }
+
+    public function workflowProjects(Request $request, array $params = []): void
+    {
+        $this->requireOpsFinanceAccess($request);
+        $filters = $this->workflowFilters($request);
+        $result = OpsFinanceWorkflowService::paginate($filters, $this->page($request), 15);
+        $this->render('ops_finance/workflow_projects', [
+            'pageTitle' => 'OPS Finance Incoming Projects', 'activeNav' => 'opfin_projects',
+            'filters' => $filters, 'queue' => $result['items'], 'pagination' => $result,
+        ]);
+    }
+
+    public function workflowHistory(Request $request, array $params = []): void
+    {
+        $this->requireOpsFinanceAccess($request);
+        $filters = $this->workflowFilters($request);
+        $result = OpsFinanceWorkflowService::paginate($filters, $this->page($request), 15, true);
+        $this->render('ops_finance/workflow_projects', [
+            'pageTitle' => 'OPS Finance Project History', 'activeNav' => 'opfin_history',
+            'filters' => $filters, 'queue' => $result['items'], 'pagination' => $result, 'history' => true,
+        ]);
+    }
+
+    public function workflowShow(Request $request, array $params = []): void
+    {
+        $this->requireOpsFinanceAccess($request);
+        $id = (int) ($params['id'] ?? 0);
+        try { $project = OpsFinanceWorkflowService::details($id); } catch (\Throwable $e) { $this->notFound($e->getMessage()); }
+        $this->render('ops_finance/workflow_show', ['pageTitle'=>'OPS Finance Project Details','activeNav'=>'opfin_projects','project'=>$project]);
+    }
+
+    public function uploadFinanceDocument(Request $request, array $params = []): void
+    {
+        $user = $this->requireOpsFinanceAccess($request); $id = (int) ($params['id'] ?? 0);
+        try { $project = OpsFinanceWorkflowService::details($id); } catch (\Throwable $e) { $this->notFound($e->getMessage()); }
+        $result = OpsFinanceWorkflowService::upload($project, (string)$request->post('document_type',''), $request->file('document'), $user, $request);
+        Session::flash($result['success'] ? 'success' : 'error', $result['success'] ? 'OPS Finance document uploaded successfully.' : ($result['error'] ?? 'Upload failed.'));
+        Response::redirect('/ops-finance/projects/' . $id);
+    }
+
+    public function submitToAdminFinance(Request $request, array $params = []): void
+    {
+        $user = $this->requireOpsFinanceAccess($request); $id = (int) ($params['id'] ?? 0);
+        try { $project = OpsFinanceWorkflowService::details($id); } catch (\Throwable $e) { $this->notFound($e->getMessage()); }
+        $result = OpsFinanceWorkflowService::submit($project, $user, $request);
+        Session::flash($result['success'] ? 'success' : 'error', $result['success'] ? 'Project submitted to Admin Finance.' : ($result['error'] ?? 'Submission failed.'));
+        Response::redirect('/ops-finance/projects/' . $id);
+    }
+
+    /** @return array<string,string> */
+    private function workflowFilters(Request $request): array
+    {
+        return ['q'=>(string)$request->query('q',''),'category'=>(string)$request->query('category',''),'status'=>(string)$request->query('status',''),'date_from'=>(string)$request->query('date_from',''),'date_to'=>(string)$request->query('date_to',''),'sort'=>(string)$request->query('sort','received')];
+    }
+
+    private function page(Request $request): int
+    {
+        $raw = (string)$request->query('page','1'); return ctype_digit($raw) ? max(1,(int)$raw) : 1;
+    }
     /**
      * Dedicated OPS Finance Purchase Request Review & Actual BOM Upload Dashboard.
      *
