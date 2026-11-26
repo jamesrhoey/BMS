@@ -44,6 +44,7 @@ $specialDocs = $specialChecklist ?? \App\Services\MarketingChecklistService::che
                             <div class="invalid-feedback small"><?= field_error('project_category') ?></div>
                         <?php endif; ?>
 
+                        <?php if (empty($isMarketingUser)): ?>
                         <!-- Dynamic Document Upload Checklist Preview -->
                         <div class="mt-2 p-3 bg-light border rounded-2" id="checklist-preview-box">
                             <div class="d-flex justify-content-between align-items-center mb-2">
@@ -96,6 +97,7 @@ $specialDocs = $specialChecklist ?? \App\Services\MarketingChecklistService::che
                                 </div>
                             </div>
                         </div>
+                        <?php endif; ?>
                     </div>
 
                     <!-- Project Name -->

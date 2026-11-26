@@ -64,8 +64,31 @@ final class OpsFinanceController extends Controller
     {
         $user = $this->requireOpsFinanceAccess($request); $id = (int) ($params['id'] ?? 0);
         try { $project = OpsFinanceWorkflowService::details($id); } catch (\Throwable $e) { $this->notFound($e->getMessage()); }
-        $result = OpsFinanceWorkflowService::upload($project, (string)$request->post('document_type',''), $request->file('document'), $user, $request);
-        Session::flash($result['success'] ? 'success' : 'error', $result['success'] ? 'OPS Finance document uploaded successfully.' : ($result['error'] ?? 'Upload failed.'));
+        $type = (string) $request->post('document_type', '');
+        $fileInput = $request->file('documents') ?? $request->file('document');
+        $files = $type === 'CANVASSING_SHEETS'
+            ? OpsFinanceWorkflowService::expandUploadedFiles($fileInput)
+            : ($fileInput !== null ? [$fileInput] : []);
+
+        $uploadedCount = 0;
+        $errors = [];
+        foreach ($files as $file) {
+            $result = OpsFinanceWorkflowService::upload($project, $type, $file, $user, $request);
+            if (!empty($result['success'])) {
+                $uploadedCount++;
+            } else {
+                $errors[] = (string) ($result['error'] ?? 'Upload failed.');
+            }
+        }
+
+        if ($uploadedCount > 0 && $errors === []) {
+            $label = $type === 'CANVASSING_SHEETS' ? 'canvassing sheet(s)' : 'OPS Finance document';
+            Session::flash('success', "{$uploadedCount} {$label} uploaded successfully.");
+        } elseif ($uploadedCount > 0) {
+            Session::flash('error', "{$uploadedCount} file(s) uploaded, but some files failed: " . implode(' ', $errors));
+        } else {
+            Session::flash('error', $errors[0] ?? 'Please choose a file to upload.');
+        }
         Response::redirect('/ops-finance/projects/' . $id);
     }
 

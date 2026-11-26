@@ -1284,7 +1284,9 @@ final class Project
               OR p.verification_status IN ('forwarded_to_admin_finance', 'under_admin_finance_review', 'jom_issued', 'forwarded_to_operations')
               OR p.forwarded_to_afin_at IS NOT NULL)",
         ];
-        $params = [];
+        $params = [
+            'afin_dept_id' => $afinDeptId,
+        ];
 
         $search = trim((string) ($filters['q'] ?? ''));
         if ($search !== '') {

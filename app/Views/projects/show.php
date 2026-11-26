@@ -17,6 +17,15 @@ if (!empty($isMarketingUser)) {
 
 $checklistItems = $checklist['items'] ?? [];
 $supplementaryDocs = $checklist['supplementary_documents'] ?? [];
+$opsFinancePr = null;
+$opsFinanceCanvassing = [];
+foreach ($supplementaryDocs as $supplementaryDoc) {
+    if (($supplementaryDoc['document_type'] ?? '') === 'PR') {
+        $opsFinancePr = $supplementaryDoc;
+    } elseif (($supplementaryDoc['document_type'] ?? '') === 'CANVASSING_SHEETS') {
+        $opsFinanceCanvassing[] = $supplementaryDoc;
+    }
+}
 $missingRequiredTypes = $checklist['missing_required_types'] ?? [];
 $attentionTypes = $checklist['attention_types'] ?? [];
 $requiredCount = (int) ($checklist['required_count'] ?? 6);
@@ -503,7 +512,7 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
     </div>
 
     <!-- Optional Supplementary / General Attachments -->
-    <?php if ($supplementaryDocs !== [] || !empty($canUploadDocument)): ?>
+    <?php if ($supplementaryDocs !== [] || !empty($canUploadDocument) || !empty($canSubmit)): ?>
         <div class="p-3 px-4 border-top bg-light">
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <div class="small">
@@ -599,55 +608,28 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
                     <?php endforeach; ?>
                 </ul>
             <?php endif; ?>
+
+            <?php if (!empty($canSubmit)): ?>
+                <div class="mt-3 pt-3 border-top">
+                    <form
+                        method="POST"
+                        action="<?= url('/projects/' . $projectId . '/submit') ?>"
+                        <?= $isChecklistComplete ? 'data-confirm="Confirm forwarding project \'' . e($project['project_code']) . '\' simultaneously to Project Management and Admin Finance?"' : '' ?>
+                    >
+                        <?= csrf_field() ?>
+                        <div class="mb-3">
+                            <label for="submission_notes" class="form-label small fw-medium mb-1">Remarks for Project Management &amp; Admin Finance (Optional)</label>
+                            <textarea id="submission_notes" name="submission_notes" rows="2" maxlength="1000" class="form-control form-control-sm" placeholder="Add remarks for Project Management and Admin Finance..."></textarea>
+                        </div>
+                        <button type="submit" class="btn <?= $isChecklistComplete ? 'btn-success' : 'btn-outline-secondary btn-sm' ?> fw-semibold" <?= !$isChecklistComplete ? 'disabled' : '' ?> title="<?= !$isChecklistComplete ? 'Upload all required Marketing documents before submission.' : '' ?>">
+                            <?= in_array($status, ['Returned for Corrections', 'Returned to Marketing for Corrections', 'Returned to Marketing'], true) ? 'Resubmit Project' : 'Submit Project' ?>
+                        </button>
+                    </form>
+                </div>
+            <?php endif; ?>
         </div>
     <?php endif; ?>
 </div>
-
-<!-- Document Completeness Validation & Submit to Project Management Panel -->
-        <?php if (!empty($canSubmit)): ?>
-            <div id="submission-panel" class="bms-card p-4 mb-4 border-start border-4 <?= $isChecklistComplete ? 'border-success' : 'border-warning' ?>">
-                <h3 class="h6 fw-bold mb-2">
-                    <?= in_array($status, ['Returned for Corrections', 'Returned to Marketing for Corrections', 'Returned to Marketing'], true) ? 'Resubmit Project to Project Management and Admin Finance' : 'Submit to Project Management and Admin Finance' ?>
-                </h3>
-
-                <?php if (!$isChecklistComplete): ?>
-                    <p class="small text-secondary mb-2">
-                        <strong><?= count($missingRequiredTypes) ?> of <?= $requiredCount ?> required Marketing document<?= count($missingRequiredTypes) === 1 ? ' is' : 's are' ?> still missing</strong> (all <?= $requiredCount ?> must be uploaded before submission):
-                    </p>
-                    <div class="mb-3">
-                        <?php foreach ($missingRequiredTypes as $missingType): ?>
-                            <span class="badge badge-soft-danger me-1 mb-1"><?= e($missingType) ?> — Missing</span>
-                        <?php endforeach; ?>
-                    </div>
-                    <?php if ($catLabel === 'Special Project'): ?>
-                        <div class="small alert alert-warning py-2 px-3 mb-3">
-                            <strong>Special Project Requirement:</strong> Marketing Purchase Order (PO) issued by client is mandatory for submission.
-                        </div>
-                    <?php endif; ?>
-                <?php else: ?>
-                    <p class="small text-secondary mb-3">
-                        All <strong><?= $requiredCount ?> required Marketing documents</strong> have been uploaded. Submitting forwards this project simultaneously to both <strong>Project Management</strong> and <strong>Admin Finance</strong> review queues.
-                    </p>
-                <?php endif; ?>
-
-                <form
-                    method="POST"
-                    action="<?= url('/projects/' . $projectId . '/submit') ?>"
-                    <?= $isChecklistComplete ? 'data-confirm="Confirm forwarding project \'' . e($project['project_code']) . '\' simultaneously to Project Management and Admin Finance?"' : '' ?>
-                >
-                    <?= csrf_field() ?>
-                    <div class="mb-3">
-                        <label for="submission_notes" class="form-label small fw-medium mb-1">Handoff Remarks for Project Management &amp; Admin Finance (Optional)</label>
-                        <textarea id="submission_notes" name="submission_notes" rows="2" maxlength="1000" class="form-control form-control-sm" placeholder="Summarize document package highlights or revision notes for PM and Admin Finance..."></textarea>
-                    </div>
-                    <div class="d-flex flex-wrap gap-2">
-                        <button type="submit" class="btn <?= $isChecklistComplete ? 'btn-success' : 'btn-outline-secondary btn-sm' ?> fw-semibold" <?= !$isChecklistComplete ? 'disabled' : '' ?>>
-                            <?= in_array($status, ['Returned for Corrections', 'Returned to Marketing for Corrections', 'Returned to Marketing'], true) ? 'Resubmit Project' : 'Submit Project' ?>
-                        </button>
-                    </div>
-                </form>
-            </div>
-        <?php endif; ?>
 
         <!-- Project Management Document Verification & Handoff Panel -->
         <?php
@@ -1151,7 +1133,7 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
                 </div>
             </div>
         <?php endif; ?>
-        <?php if ($isForwardedToOps || !empty($isOperationsUser)): ?>
+        <?php if (!empty($isOperationsUser)): ?>
             <!-- Operations Handoff Package (JOM Number, SLD & Marketing BOM) -->
             <div id="operations-handoff-package" class="bms-card p-4 mb-4 border-start border-4 border-info">
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
@@ -2301,6 +2283,69 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
                         </form>
                     </div>
                 <?php endif; ?>
+            </div>
+        <?php endif; ?>
+
+        <?php if (!empty($isAdminFinanceUser) && !empty($project['opfin_submitted_to_afin_at'])): ?>
+            <!-- Final workflow handoff: OPS Finance to Admin Finance -->
+            <div id="admin-finance-opfin-handoff" class="bms-card p-4 mb-4 border-start border-4 border-primary">
+                <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                    <div>
+                        <h3 class="h6 fw-bold mb-1">OPS Finance Submission to Admin Finance</h3>
+                        <div class="text-secondary small">Existing <?= e($catLabel) ?> project received from OPS Finance for supplier Purchase Order issuance.</div>
+                    </div>
+                    <span class="badge badge-soft-primary">OPS Finance Handoff</span>
+                </div>
+
+                <div class="row g-2 small mb-3">
+                    <div class="col-12 col-md-4"><span class="text-secondary d-block">Submitted by</span><strong><?= e($project['opfin_submitted_to_afin_by_name'] ?? 'OPS Finance') ?></strong></div>
+                    <div class="col-12 col-md-4"><span class="text-secondary d-block">Submitted on</span><strong><?= format_datetime($project['opfin_submitted_to_afin_at']) ?></strong></div>
+                    <div class="col-12 col-md-4"><span class="text-secondary d-block">Category</span><strong><?= e($catLabel) ?></strong></div>
+                </div>
+
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>OPS Finance Document</th>
+                                <th>File</th>
+                                <th>Uploaded</th>
+                                <th class="text-end">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td class="fw-semibold">PR</td>
+                                <td><?= $opsFinancePr !== null ? e($opsFinancePr['original_filename']) : '<span class="text-danger">Missing</span>' ?></td>
+                                <td class="small text-secondary"><?= $opsFinancePr !== null ? format_datetime($opsFinancePr['created_at'] ?? null) : '—' ?></td>
+                                <td class="text-end">
+                                    <?php if ($opsFinancePr !== null && !empty($canDownloadDocument)): ?>
+                                        <a href="<?= url('/projects/' . $projectId . '/documents/' . (int) $opsFinancePr['id'] . '/view') ?>" class="btn btn-sm btn-outline-primary" target="_blank">View</a>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                            <?php if ($opsFinanceCanvassing === []): ?>
+                                <tr>
+                                    <td class="fw-semibold">Canvassing Sheets</td>
+                                    <td colspan="3" class="text-danger">Missing</td>
+                                </tr>
+                            <?php else: ?>
+                                <?php foreach ($opsFinanceCanvassing as $sheet): ?>
+                                    <tr>
+                                        <td class="fw-semibold">Canvassing Sheet</td>
+                                        <td><?= e($sheet['original_filename']) ?></td>
+                                        <td class="small text-secondary"><?= format_datetime($sheet['created_at'] ?? null) ?></td>
+                                        <td class="text-end">
+                                            <?php if (!empty($canDownloadDocument)): ?>
+                                                <a href="<?= url('/projects/' . $projectId . '/documents/' . (int) $sheet['id'] . '/view') ?>" class="btn btn-sm btn-outline-primary" target="_blank">View</a>
+                                            <?php endif; ?>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         <?php endif; ?>
 

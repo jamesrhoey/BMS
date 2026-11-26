@@ -28,6 +28,28 @@ final class MarketingChecklistService
     }
 
     /**
+     * Normalize legacy and descriptive document names to their checklist codes.
+     *
+     * @param string|null $documentType Raw document type stored in the database.
+     */
+    public static function normalizeDocumentType(?string $documentType): string
+    {
+        $raw = trim((string) $documentType);
+        $key = strtolower((string) preg_replace('/\s+/', ' ', $raw));
+
+        return match ($key) {
+            'son', 'service on notice', 'service on notice (son)', 'service order', 'service on notice / service order' => 'SON',
+            'sld', 'single line diagram', 'single line diagram (sld)' => 'SLD',
+            'bom', 'bill of materials', 'bill of materials (bom)', 'marketing bill of materials' => 'BOM',
+            'ca', 'cost analysis', 'cost analysis (ca)', 'marketing cost analysis' => 'CA',
+            'prop', 'proposal to client', 'commercial proposal issued to client' => 'PROP',
+            'prop-supplier', 'proposal from supplier', 'vendor / supplier quotation & proposal' => 'PROP-SUPPLIER',
+            'po', 'marketing po', 'purchase order', 'purchase order (client po)' => 'PO',
+            default => $raw,
+        };
+    }
+
+    /**
      * Get display label for category key ('MRC' or 'Special Project').
      */
     public static function categoryLabel(?string $category): string

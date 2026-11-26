@@ -90,6 +90,34 @@ final class OpsFinanceWorkflowService
         return $project;
     }
 
+    /**
+     * Expand PHP's nested multi-file upload structure into individual files.
+     *
+     * @param array<string, mixed>|null $files
+     * @return list<array<string, mixed>>
+     */
+    public static function expandUploadedFiles(?array $files): array
+    {
+        if ($files === null || !array_key_exists('name', $files)) {
+            return [];
+        }
+
+        if (!is_array($files['name'])) {
+            return [$files];
+        }
+
+        $expanded = [];
+        foreach (array_keys($files['name']) as $index) {
+            $file = [];
+            foreach ($files as $key => $value) {
+                $file[$key] = is_array($value) ? ($value[$index] ?? null) : $value;
+            }
+            $expanded[] = $file;
+        }
+
+        return $expanded;
+    }
+
     public static function upload(array $project, string $type, ?array $file, array $user, Request $request): array
     {
         if (!in_array($type, ['PR','CANVASSING_SHEETS'], true)) return ['success'=>false,'error'=>'Invalid OPS Finance document type.'];
