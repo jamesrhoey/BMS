@@ -413,6 +413,7 @@ $isComplete = ($missingCount === 0);
 </div>
 
 <!-- Section 4: Audit & Workflow Timeline -->
+<?php if (false): ?>
 <div class="card shadow-sm border-0 mb-4">
     <div class="card-header bg-white py-3 border-bottom">
         <h5 class="h6 fw-bold mb-0 text-dark">4. Project Workflow &amp; Audit History</h5>
@@ -458,3 +459,4 @@ $isComplete = ($missingCount === 0);
         <?php endif; ?>
     </div>
 </div>
+<?php endif; ?>

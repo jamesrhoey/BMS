@@ -229,6 +229,11 @@ final class ProjectDocumentController extends Controller
             default => 'other',
         };
 
+        $returnTo = (string) $request->query('return_to', '');
+        $backUrl = $returnTo === 'ops-finance'
+            ? url('/ops-finance/projects/' . (int) $project['id'])
+            : url('/projects/' . $project['id'] . '#checklist');
+
         $this->render('projects/document_viewer', [
             'pageTitle' => 'Viewing: ' . $document['original_filename'] . ' — ' . $project['project_code'],
             'project' => $project,
@@ -237,7 +242,7 @@ final class ProjectDocumentController extends Controller
             'fileExtension' => $ext,
             'rawUrl' => url('/projects/' . $project['id'] . '/documents/' . $docId . '/raw'),
             'downloadUrl' => url('/projects/' . $project['id'] . '/documents/' . $docId . '/download'),
-            'backUrl' => url('/projects/' . $project['id'] . '#checklist'),
+            'backUrl' => $backUrl,
         ]);
     }
 

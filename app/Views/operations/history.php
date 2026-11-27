@@ -88,14 +88,14 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
                             <td class="small text-secondary"><?= e($item['submitted_to_opfin_by_name'] ?? '—') ?></td>
                             <td class="text-center">
                                 <?php if (!empty($item['is_submitted_to_opfin'])): ?>
-                                    <span class="badge bg-dark">Submitted to OPS Finance</span>
+                                    <span class="small text-dark fw-semibold">Submitted to OPS Finance</span>
                                 <?php else: ?>
-                                    <span class="badge bg-secondary"><?= e($item['status']) ?></span>
+                                    <span class="small text-dark fw-semibold"><?= e($item['status']) ?></span>
                                 <?php endif; ?>
                             </td>
                             <td class="text-end">
-                                <a href="<?= url('/operations/projects/' . $item['id']) ?>" class="btn btn-sm btn-outline-primary">
-                                    View
+                                <a href="<?= url('/operations/projects/' . $item['id']) ?>" class="bms-action-icon bms-action-icon--primary" title="View Project Details" aria-label="View Project Details">
+                                    <?= bms_icon('eye') ?>
                                 </a>
                             </td>
                         </tr>

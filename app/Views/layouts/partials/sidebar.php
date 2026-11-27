@@ -277,22 +277,6 @@ $userInitial = strtoupper((string) substr($userFullName !== '' ? $userFullName :
             $isAfinJomIssuedActive = ($afinActiveNav === 'afin_projects') && in_array($afinCurrentStatus, ['jom_issued', 'JOM Issued', 'JOM Number Issued'], true);
             $isAfinJomGroupActive = $isAfinJomQueueActive || $isAfinJomUnderReviewActive || $isAfinJomIssuedActive;
 
-            // 4. Operations Handover Submenu
-            $isAfinReadyOpsActive = ($afinActiveNav === 'afin_projects') && in_array($afinCurrentStatus, ['ready_for_operations', 'ready_ops'], true);
-            $isAfinForwardedOpsActive = ($afinActiveNav === 'afin_projects') && in_array($afinCurrentStatus, ['forwarded_to_operations', 'forwarded_ops', 'Forwarded to Operations'], true);
-            $isAfinHandoverGroupActive = $isAfinReadyOpsActive || $isAfinForwardedOpsActive;
-
-            // 5. Actual BOM Management Submenu
-            $isAfinAbSubmittedActive = ($afinActiveNav === 'afin_projects') && in_array($afinCurrentStatus, ['actual_bom_submitted', 'actual_bom_incoming', 'Actual BOM Submitted to Admin Finance'], true);
-            $isAfinAbUnderReviewActive = ($afinActiveNav === 'afin_projects') && in_array($afinCurrentStatus, ['actual_bom_under_review', 'Actual BOM Under Admin Finance Review'], true);
-            $isAfinAbReturnedActive = ($afinActiveNav === 'afin_projects') && in_array($afinCurrentStatus, ['actual_bom_returned', 'Actual BOM Returned for Corrections'], true);
-            $isAfinAbAcceptedActive = ($afinActiveNav === 'afin_projects') && in_array($afinCurrentStatus, ['actual_bom_accepted', 'Actual BOM Accepted by Admin Finance'], true);
-            $isAfinActualBomGroupActive = $isAfinAbSubmittedActive || $isAfinAbUnderReviewActive || $isAfinAbReturnedActive || $isAfinAbAcceptedActive;
-
-            // 6. Purchasing Management Submenu
-            $isAfinPoRecordsActive = ($afinActiveNav === 'afin_projects') && in_array($afinCurrentStatus, ['po_records', 'has_po'], true);
-            $isAfinPoIssuedActive = ($afinActiveNav === 'afin_projects') && in_array($afinCurrentStatus, ['po_issued', 'Issued to Supplier'], true);
-            $isAfinPurchasingGroupActive = $isAfinPoRecordsActive || $isAfinPoIssuedActive;
             ?>
 
             <!-- DASHBOARD -->
@@ -365,101 +349,6 @@ $userInitial = strtoupper((string) substr($userFullName !== '' ? $userFullName :
                 </div>
             </div>
 
-            <!-- OPERATIONS HANDOVER (Dropdown) -->
-            <div class="bms-nav-group <?= $isAfinHandoverGroupActive ? 'open' : '' ?>" data-nav-group="afin-handover">
-                <button type="button"
-                        class="bms-nav-dropdown-toggle <?= $isAfinHandoverGroupActive ? 'active-parent' : '' ?>"
-                        data-nav-toggle="afin-handover"
-                        aria-expanded="<?= $isAfinHandoverGroupActive ? 'true' : 'false' ?>"
-                        aria-controls="nav-group-afin-handover"
-                        title="Operations Handover">
-                    <span class="bms-nav-icon" aria-hidden="true"><?= bms_icon('send', 18) ?></span>
-                    <span class="bms-nav-label">Operations Handover</span>
-                    <span class="bms-nav-chevron" aria-hidden="true"><?= bms_icon('chevron-down', 14) ?></span>
-                </button>
-                <div class="bms-subnav-menu" id="nav-group-afin-handover" role="region" aria-label="Operations Handover Submenu">
-                    <a href="<?= url('/admin-finance/projects?status=ready_for_operations') ?>"
-                       class="bms-subnav-link <?= $isAfinReadyOpsActive ? 'active' : '' ?>"
-                       title="Projects Ready for Operations">
-                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Projects Ready for Operations</span>
-                    </a>
-                    <a href="<?= url('/admin-finance/projects?status=forwarded_to_operations') ?>"
-                       class="bms-subnav-link <?= $isAfinForwardedOpsActive ? 'active' : '' ?>"
-                       title="Forwarded Projects">
-                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Forwarded Projects</span>
-                    </a>
-                </div>
-            </div>
-
-            <!-- ACTUAL BOM MANAGEMENT (Dropdown) -->
-            <div class="bms-nav-group <?= $isAfinActualBomGroupActive ? 'open' : '' ?>" data-nav-group="afin-actual-bom">
-                <button type="button"
-                        class="bms-nav-dropdown-toggle <?= $isAfinActualBomGroupActive ? 'active-parent' : '' ?>"
-                        data-nav-toggle="afin-actual-bom"
-                        aria-expanded="<?= $isAfinActualBomGroupActive ? 'true' : 'false' ?>"
-                        aria-controls="nav-group-afin-actual-bom"
-                        title="Actual BOM Management">
-                    <span class="bms-nav-icon" aria-hidden="true"><?= bms_icon('layers', 18) ?></span>
-                    <span class="bms-nav-label">Actual BOM Management</span>
-                    <span class="bms-nav-chevron" aria-hidden="true"><?= bms_icon('chevron-down', 14) ?></span>
-                </button>
-                <div class="bms-subnav-menu" id="nav-group-afin-actual-bom" role="region" aria-label="Actual BOM Management Submenu">
-                    <a href="<?= url('/admin-finance/projects?status=actual_bom_submitted') ?>"
-                       class="bms-subnav-link <?= $isAfinAbSubmittedActive ? 'active' : '' ?>"
-                       title="Incoming Actual BOM">
-                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Incoming Actual BOM</span>
-                    </a>
-                    <a href="<?= url('/admin-finance/projects?status=actual_bom_under_review') ?>"
-                       class="bms-subnav-link <?= $isAfinAbUnderReviewActive ? 'active' : '' ?>"
-                       title="Actual BOM Under Review">
-                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Actual BOM Under Review</span>
-                    </a>
-                    <a href="<?= url('/admin-finance/projects?status=actual_bom_returned') ?>"
-                       class="bms-subnav-link <?= $isAfinAbReturnedActive ? 'active' : '' ?>"
-                       title="Returned Actual BOM">
-                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Returned Actual BOM</span>
-                    </a>
-                    <a href="<?= url('/admin-finance/projects?status=actual_bom_accepted') ?>"
-                       class="bms-subnav-link <?= $isAfinAbAcceptedActive ? 'active' : '' ?>"
-                       title="Accepted Actual BOM">
-                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Accepted Actual BOM</span>
-                    </a>
-                </div>
-            </div>
-
-            <!-- PURCHASING MANAGEMENT (Dropdown) -->
-            <div class="bms-nav-group <?= $isAfinPurchasingGroupActive ? 'open' : '' ?>" data-nav-group="afin-purchasing">
-                <button type="button"
-                        class="bms-nav-dropdown-toggle <?= $isAfinPurchasingGroupActive ? 'active-parent' : '' ?>"
-                        data-nav-toggle="afin-purchasing"
-                        aria-expanded="<?= $isAfinPurchasingGroupActive ? 'true' : 'false' ?>"
-                        aria-controls="nav-group-afin-purchasing"
-                        title="Purchasing Management">
-                    <span class="bms-nav-icon" aria-hidden="true"><?= bms_icon('briefcase', 18) ?></span>
-                    <span class="bms-nav-label">Purchasing Management</span>
-                    <span class="bms-nav-chevron" aria-hidden="true"><?= bms_icon('chevron-down', 14) ?></span>
-                </button>
-                <div class="bms-subnav-menu" id="nav-group-afin-purchasing" role="region" aria-label="Purchasing Management Submenu">
-                    <a href="<?= url('/admin-finance/projects?status=po_records') ?>"
-                       class="bms-subnav-link <?= $isAfinPoRecordsActive ? 'active' : '' ?>"
-                       title="Purchase Order Records">
-                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Purchase Order Records</span>
-                    </a>
-                    <a href="<?= url('/admin-finance/projects?status=po_issued') ?>"
-                       class="bms-subnav-link <?= $isAfinPoIssuedActive ? 'active' : '' ?>"
-                       title="Purchase Order Tracking">
-                        <span class="bms-subnav-bullet" aria-hidden="true"></span>
-                        <span class="bms-nav-label">Purchase Order Tracking</span>
-                    </a>
-                </div>
-            </div>
         <?php elseif (!empty($isOperationsUser)): ?>
             <?php
             // Operations Department Submenu & Dropdown Active State Resolution
@@ -903,7 +792,7 @@ $userInitial = strtoupper((string) substr($userFullName !== '' ? $userFullName :
             </a>
         <?php endif; ?>
 
-        <?php if (!empty($canAccessIatms) && empty($isOpsFinanceUser)): ?>
+        <?php if (!empty($canAccessIatms) && empty($isOpsFinanceUser) && empty($isAdminFinanceUser)): ?>
             <?php
             $iatmsNav = (string) ($activeNav ?? '');
             $isIatmsFormsOpen = in_array($iatmsNav, ['iatms_stock_in', 'iatms_stock_in_create', 'iatms_stock_out', 'iatms_stock_out_create', 'iatms_ending_balance'], true);

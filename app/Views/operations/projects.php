@@ -160,13 +160,13 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
                             </td>
                             <td class="text-center">
                                 <?php if ($isSubmittedOpfin): ?>
-                                    <span class="badge bg-dark">Submitted to OPS Finance</span>
+                                    <span class="small text-dark fw-semibold">Submitted to OPS Finance</span>
                                 <?php elseif ($isOpsComplete): ?>
-                                    <span class="badge bg-success">OPS Documents Complete</span>
+                                    <span class="small text-dark fw-semibold">OPS Documents Complete</span>
                                 <?php elseif ($opsDocsCount > 0): ?>
-                                    <span class="badge bg-warning text-dark">Under OPS Processing</span>
+                                    <span class="small text-dark fw-semibold">Under OPS Processing</span>
                                 <?php else: ?>
-                                    <span class="badge bg-secondary">Pending Processing</span>
+                                    <span class="small text-dark fw-semibold">Pending Processing</span>
                                 <?php endif; ?>
                             </td>
                             <td class="text-center">
@@ -187,13 +187,13 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
                                 <div class="small text-muted mt-1"><?= $opsDocsCount ?> / 3 uploaded</div>
                             </td>
                             <td class="text-end">
-                                <div class="btn-group btn-group-sm">
-                                    <a href="<?= url('/operations/projects/' . $item['id']) ?>" class="btn btn-outline-primary" title="View Project Details">
-                                        View
+                                <div class="bms-action-group justify-content-end">
+                                    <a href="<?= url('/operations/projects/' . $item['id']) ?>" class="bms-action-icon bms-action-icon--primary" title="View Project Details" aria-label="View Project Details">
+                                        <?= bms_icon('eye') ?>
                                     </a>
                                     <?php if (!$isSubmittedOpfin): ?>
-                                        <a href="<?= url('/operations/projects/' . $item['id'] . '#ops-documents') ?>" class="btn btn-outline-secondary" title="Upload Documents">
-                                            Upload
+                                        <a href="<?= url('/operations/projects/' . $item['id'] . '#ops-documents') ?>" class="bms-action-icon bms-action-icon--success" title="Upload Documents" aria-label="Upload Documents">
+                                            <?= bms_icon('upload') ?>
                                         </a>
                                     <?php endif; ?>
                                 </div>

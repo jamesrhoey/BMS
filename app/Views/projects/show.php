@@ -130,21 +130,32 @@ $selectedFlagged = is_array($oldFlagged) ? array_map('strval', $oldFlagged) : []
 
 <!-- JOM Number / Forwarding / PM Verification Status Banners -->
 <?php if (!empty($project['jom_number'])): ?>
+    <?php $jomIssuedByAdminFinance = !empty($project['jom_issued_by']) || !empty($project['jom_issuer_name']); ?>
     <div class="alert alert-primary border-primary border-opacity-50 mb-4 shadow-sm">
         <div class="d-flex flex-wrap justify-content-between align-items-center gap-2">
             <div>
-                <span class="badge bg-primary text-uppercase me-2">Official JOM Issued</span>
+                <span class="badge bg-primary text-uppercase me-2"><?= $jomIssuedByAdminFinance ? 'Official JOM Issued' : 'JOM File Uploaded' ?></span>
                 <span class="font-monospace fw-bold fs-5 text-primary"><?= e($project['jom_number']) ?></span>
                 <div class="small text-secondary mt-1">
-                    Job Order Memorandum officially issued by <strong><?= e($project['jom_issuer_name'] ?: 'Admin Finance') ?></strong>
+                    <?php if ($jomIssuedByAdminFinance): ?>
+                        Job Order Memorandum officially issued by <strong><?= e($project['jom_issuer_name']) ?></strong>
+                    <?php else: ?>
+                        Job Order Memorandum file uploaded by <strong><?= e($project['jom_uploader_name'] ?: 'Project Management') ?></strong>
+                    <?php endif; ?>
                     <?php if (!empty($project['jom_issued_at'])): ?>
                         on <?= format_datetime((string) $project['jom_issued_at']) ?>
                     <?php endif; ?>
-                    &bull; Authorized for downstream departmental execution (Operations, OPS Finance, Admin Finance).
+                    <?php if ($jomIssuedByAdminFinance): ?>
+                        &bull; Authorized for downstream departmental execution (Operations, OPS Finance, Admin Finance).
+                    <?php endif; ?>
                 </div>
             </div>
             <div>
-                <span class="badge badge-soft-success fs-6"><i class="me-1">&#10003;</i> JOM Assigned</span>
+                <?php if ($jomIssuedByAdminFinance): ?>
+                    <span class="badge badge-soft-success fs-6"><i class="me-1">&#10003;</i> JOM Assigned</span>
+                <?php else: ?>
+                    <span class="badge badge-soft-success fs-6"><i class="me-1">&#10003;</i> Uploaded by PM</span>
+                <?php endif; ?>
             </div>
         </div>
     </div>
@@ -155,7 +166,7 @@ $isForwardedToOps = in_array($status, ['Forwarded to Operations', 'Forwarded to 
     || !empty($project['forwarded_to_ops_at'])
     || $verificationStatus === 'forwarded_to_operations';
 ?>
-<?php if ($isForwardedToOps): ?>
+<?php if ($isForwardedToOps && empty($isProjectManagementUser)): ?>
     <div class="alert alert-success border-success border-opacity-50 mb-4">
         <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
             <div class="fw-bold text-success">
@@ -1261,6 +1272,7 @@ $isForwardedToOps = in_array($status, ['Forwarded to Operations', 'Forwarded to 
         <?php endif; ?>
 
         <!-- End-to-End Linked Document Workflow Bar (Section 6) -->
+        <?php if (empty($isProjectManagementUser) && empty($isMarketingUser) && empty($isAdminFinanceUser)): ?>
         <div id="linked-document-workflow-bar" class="bms-card p-3 mb-4 bg-light border">
             <div class="d-flex justify-content-between align-items-center mb-2">
                 <span class="small fw-bold text-dark text-uppercase tracking-wider">
@@ -1369,15 +1381,18 @@ $isForwardedToOps = in_array($status, ['Forwarded to Operations', 'Forwarded to 
                 </div>
             </div>
         </div>
+        <?php endif; ?>
 
         <?php
-        $showOperationsPrPanel = ((!$isAdminFinanceUser && !$isAdmin) && $isForwardedToOps)
+        $showOperationsPrPanel = empty($isProjectManagementUser) && empty($isOperationsUser) && (
+            ((!$isAdminFinanceUser && !$isAdmin) && $isForwardedToOps)
             || $purchaseRequest !== null
             || !empty($canPreparePr)
             || !empty($canSubmitPr)
             || !empty($canReviewPr)
             || !empty($isOperationsUser)
-            || !empty($isOpsFinanceUser);
+            || !empty($isOpsFinanceUser)
+        );
         ?>
         <?php if ($showOperationsPrPanel): ?>
             <!-- Operations Purchase Request (PR) Panel -->
