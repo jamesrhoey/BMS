@@ -91,7 +91,9 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
                         $pId = (int) $proj['id'];
                         $pStatus = (string) ($proj['status'] ?? '');
                         $hasJom = !empty($proj['jom_number']);
-                        $isForwardedOps = !empty($proj['forwarded_to_ops_at']) || $pStatus === 'Forwarded to Operations';
+                        $hasJomDocument = !empty($proj['jom_document_id']) || !empty($proj['ops_jom_document_id']);
+                        $isForwardedOps = !empty($proj['forwarded_to_ops_at'])
+                            || in_array($pStatus, ['Forwarded to Operations', 'Forwarded to OPS', 'Received by OPS'], true);
                         $canStartAfinReview = false;
                         $canIssueJom = false;
                         $canForwardOps = false;
@@ -101,6 +103,9 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
                             $jomStatusBadge = 'badge-soft-info';
                         } elseif ($hasJom) {
                             $jomStatusLabel = 'JOM Issued';
+                            $jomStatusBadge = 'badge-soft-success';
+                        } elseif ($hasJomDocument) {
+                            $jomStatusLabel = 'JOM Uploaded by Project Management';
                             $jomStatusBadge = 'badge-soft-success';
                         } elseif ($pStatus === 'Under Admin Finance Review') {
                             $jomStatusLabel = 'Under Admin Finance Review';
@@ -140,6 +145,8 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
                                     <?php if (!empty($proj['jom_issued_at'])): ?>
                                         <div class="text-secondary small text-truncate"><?= format_datetime($proj['jom_issued_at']) ?></div>
                                     <?php endif; ?>
+                                <?php elseif ($hasJomDocument): ?>
+                                    <span class="badge badge-soft-success">Uploaded by PM</span>
                                 <?php else: ?>
                                     <span class="text-secondary small">Pending Issuance</span>
                                 <?php endif; ?>

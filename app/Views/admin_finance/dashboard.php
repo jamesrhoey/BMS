@@ -17,8 +17,6 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
     return url('/admin-finance/dashboard' . ($query !== [] ? '?' . http_build_query($query) : ''));
 };
 
-$jomFormatPattern = (string) ($jomConfig['format_pattern'] ?? 'JOM-{YYYY}-{SEQ}');
-$jomRequiresConfirmation = (bool) ($jomConfig['requires_business_confirmation'] ?? true);
 ?>
 
 <!-- 4 Database-Driven Admin Finance Summary Metric Cards -->
@@ -55,21 +53,6 @@ $jomRequiresConfirmation = (bool) ($jomConfig['requires_business_confirmation'] 
         </div>
     </div>
 </div>
-
-<?php if ($jomRequiresConfirmation): ?>
-    <div class="bms-card p-3 mb-4 border-start border-4 border-warning bg-light">
-        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 small">
-            <div>
-                <span class="badge badge-soft-warning me-1">Configurable JOM Format</span>
-                <strong class="text-dark">Configured Pattern: <code class="text-dark"><?= e($jomFormatPattern) ?></code></strong>
-                <span class="text-secondary ms-1">
-                    — Configurable in <code>config/app.php</code> (<code>BMS_JOM_FORMAT_PATTERN</code>). Requires official business confirmation before production cutover.
-                </span>
-            </div>
-            <a href="<?= url('/admin-finance/projects') ?>" class="btn btn-outline-secondary btn-sm py-0 px-2">Open Full Queue &rarr;</a>
-        </div>
-    </div>
-<?php endif; ?>
 
 <!-- Unified Nuclias-Style Filter Toolbar & Admin Finance Incoming Project Queue Table -->
 <div class="bms-table-panel">
@@ -145,9 +128,11 @@ $jomRequiresConfirmation = (bool) ($jomConfig['requires_business_confirmation'] 
                         $pId = (int) $proj['id'];
                         $pStatus = (string) ($proj['status'] ?? '');
                         $hasJom = !empty($proj['jom_number']);
-                        $isForwardedOps = !empty($proj['forwarded_to_ops_at']) || $pStatus === 'Forwarded to Operations';
+                        $hasJomDocument = !empty($proj['jom_document_id']) || !empty($proj['ops_jom_document_id']);
+                        $isForwardedOps = !empty($proj['forwarded_to_ops_at'])
+                            || in_array($pStatus, ['Forwarded to Operations', 'Forwarded to OPS', 'Received by OPS'], true);
                         $canStartAfinReview = !$hasJom && !$isForwardedOps && $pStatus === 'Forwarded to Admin Finance';
-                        $canIssueJom = !$hasJom && !$isForwardedOps;
+                        $canIssueJom = !$hasJom && !$hasJomDocument && !$isForwardedOps;
                         $canForwardOps = $hasJom && !$isForwardedOps;
 
                         if ($isForwardedOps) {
@@ -155,6 +140,9 @@ $jomRequiresConfirmation = (bool) ($jomConfig['requires_business_confirmation'] 
                             $jomStatusBadge = 'badge-soft-info';
                         } elseif ($hasJom) {
                             $jomStatusLabel = 'JOM Issued';
+                            $jomStatusBadge = 'badge-soft-success';
+                        } elseif ($hasJomDocument) {
+                            $jomStatusLabel = 'JOM Uploaded by Project Management';
                             $jomStatusBadge = 'badge-soft-success';
                         } elseif ($pStatus === 'Under Admin Finance Review') {
                             $jomStatusLabel = 'Under Admin Finance Review';
@@ -192,6 +180,8 @@ $jomRequiresConfirmation = (bool) ($jomConfig['requires_business_confirmation'] 
                                     <?php if (!empty($proj['jom_issued_at'])): ?>
                                         <div class="text-secondary" style="font-size: 0.72rem;"><?= format_datetime($proj['jom_issued_at']) ?></div>
                                     <?php endif; ?>
+                                <?php elseif ($hasJomDocument): ?>
+                                    <span class="badge badge-soft-success">Uploaded by PM</span>
                                 <?php else: ?>
                                     <span class="text-secondary small">Pending Issuance</span>
                                 <?php endif; ?>

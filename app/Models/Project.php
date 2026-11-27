@@ -398,6 +398,12 @@ final class Project
         return !empty($project['submitted_to_opfin_at'])
             || in_array($status, [
                 self::STATUS_SUBMITTED_TO_OPS_FINANCE,
+                self::STATUS_RECEIVED_BY_OPS_FINANCE,
+                self::STATUS_UNDER_OPS_FINANCE_PROCESSING,
+                self::STATUS_AWAITING_PR,
+                self::STATUS_AWAITING_CANVASSING_SHEETS,
+                self::STATUS_OPS_FINANCE_DOCUMENTS_COMPLETE,
+                self::STATUS_SUBMITTED_TO_ADMIN_FINANCE,
                 self::STATUS_PR_SUBMITTED_TO_OPS_FINANCE,
             ], true);
     }
@@ -619,6 +625,7 @@ final class Project
             'mkt_curr' => $marketingDeptId,
             'mkt_creator' => $marketingDeptId,
             'req_count' => $reqCount,
+            'special_req_count' => $reqCount + 1,
         ];
 
         foreach (array_values($requiredDocTypes) as $idx => $docType) {
@@ -646,7 +653,11 @@ final class Project
                 COALESCE(SUM(CASE WHEN sub.status IN ('Submitted to Project Management and Admin Finance', 'Resubmitted to Project Management and Admin Finance', 'Submitted for Document Verification', 'Submitted for Verification', 'Resubmitted for Verification', 'Submitted') THEN 1 ELSE 0 END), 0) AS submitted_projects,
                 COALESCE(SUM(CASE WHEN sub.status IN ('Under Review', 'Under Project Management Review') THEN 1 ELSE 0 END), 0) AS under_review_projects,
                 COALESCE(SUM(CASE WHEN sub.status IN ('Returned for Corrections', 'Returned to Marketing for Corrections', 'Returned to Marketing') THEN 1 ELSE 0 END), 0) AS returned_for_corrections,
-                COALESCE(SUM(CASE WHEN sub.uploaded_req_docs < :req_count THEN 1 ELSE 0 END), 0) AS missing_documents
+                COALESCE(SUM(CASE WHEN sub.uploaded_req_docs < CASE
+                    WHEN sub.workflow_type = 'special_project' OR sub.project_category = 'Special Project'
+                    THEN :special_req_count
+                    ELSE :req_count
+                END THEN 1 ELSE 0 END), 0) AS missing_documents
             FROM (
                 SELECT
                     p.id,
@@ -658,7 +669,11 @@ final class Project
                         FROM project_documents pd
                         WHERE pd.project_id = p.id
                           AND pd.is_current = 1
-                          AND pd.document_type IN ({$inListSql})
+                          AND (
+                              pd.document_type IN ({$inListSql})
+                              OR ((p.workflow_type = 'special_project' OR p.project_category = 'Special Project')
+                                  AND pd.document_type = 'Marketing PO')
+                          )
                     ) AS uploaded_req_docs
                 FROM projects p
                 INNER JOIN users u ON u.id = p.created_by
@@ -716,7 +731,11 @@ final class Project
                      FROM project_documents pd
                      WHERE pd.project_id = p.id
                        AND pd.is_current = 1
-                       AND pd.document_type IN ({$inSql}))";
+                       AND (
+                           pd.document_type IN ({$inSql})
+                           OR ((p.workflow_type = 'special_project' OR p.project_category = 'Special Project')
+                               AND pd.document_type = 'Marketing PO')
+                       ))";
         };
 
         $whereParams = [
@@ -762,12 +781,22 @@ final class Project
         $completeness = trim((string) ($filters['completeness'] ?? ''));
         if ($completeness === 'complete') {
             $fltSubquery = $makeDocSubquery('flt_doc_', $whereParams);
-            $conditions[] = "{$fltSubquery} >= :comp_req_count";
+            $conditions[] = "{$fltSubquery} >= CASE
+                WHEN (p.workflow_type = 'special_project' OR p.project_category = 'Special Project')
+                THEN :special_comp_req_count
+                ELSE :comp_req_count
+            END";
             $whereParams['comp_req_count'] = $reqCount;
+            $whereParams['special_comp_req_count'] = $reqCount + 1;
         } elseif ($completeness === 'incomplete') {
             $fltSubquery = $makeDocSubquery('flt_doc_', $whereParams);
-            $conditions[] = "{$fltSubquery} < :comp_req_count";
+            $conditions[] = "{$fltSubquery} < CASE
+                WHEN (p.workflow_type = 'special_project' OR p.project_category = 'Special Project')
+                THEN :special_comp_req_count
+                ELSE :comp_req_count
+            END";
             $whereParams['comp_req_count'] = $reqCount;
+            $whereParams['special_comp_req_count'] = $reqCount + 1;
         }
 
         $whereClause = ' WHERE ' . implode(' AND ', $conditions);

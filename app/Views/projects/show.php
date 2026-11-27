@@ -151,7 +151,9 @@ $selectedFlagged = is_array($oldFlagged) ? array_map('strval', $oldFlagged) : []
 <?php endif; ?>
 
 <?php
-$isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['forwarded_to_ops_at']) || $verificationStatus === 'forwarded_to_operations';
+$isForwardedToOps = in_array($status, ['Forwarded to Operations', 'Forwarded to OPS', 'Received by OPS'], true)
+    || !empty($project['forwarded_to_ops_at'])
+    || $verificationStatus === 'forwarded_to_operations';
 ?>
 <?php if ($isForwardedToOps): ?>
     <div class="alert alert-success border-success border-opacity-50 mb-4">
@@ -929,9 +931,9 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
         $handoffSld = $operationsHandoffDocs['sld'] ?? null;
         $handoffBom = $operationsHandoffDocs['marketing_bom'] ?? null;
         $hasAssignedJom = !empty($project['jom_number']);
+        $hasJomDocument = !empty($project['jom_document_id']) || !empty($project['ops_jom_document_id']);
+        $pmJomHandoffComplete = $hasJomDocument || $isForwardedToOps;
         $allOpsHandoffItemsReady = $hasAssignedJom && $handoffSld !== null && $handoffBom !== null;
-        $jomFormatPattern = (string) ($jomConfig['format_pattern'] ?? 'JOM-{YYYY}-{SEQ}');
-        $jomRequiresConfirmation = (bool) ($jomConfig['requires_business_confirmation'] ?? true);
         ?>
         <?php if ($showAdminFinancePanel): ?>
             <div id="admin-finance-jom-panel" class="bms-card p-4 mb-4 border-start border-4 border-info">
@@ -950,6 +952,8 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
                             <span class="badge badge-soft-info">Forwarded to Operations</span>
                         <?php elseif ($hasAssignedJom): ?>
                             <span class="badge badge-soft-success">JOM Issued</span>
+                        <?php elseif ($hasJomDocument): ?>
+                            <span class="badge badge-soft-success">JOM Uploaded by Project Management</span>
                         <?php elseif ($status === 'Under Admin Finance Review'): ?>
                             <span class="badge badge-soft-warning">Under Admin Finance Review</span>
                         <?php else: ?>
@@ -982,6 +986,7 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
                 <?php endif; ?>
 
                 <!-- Step 2: Issue JOM Number -->
+                <?php if (!$pmJomHandoffComplete): ?>
                 <div class="p-3 rounded border mb-3 <?= $hasAssignedJom ? 'bg-light border-success border-opacity-50' : 'bg-white border-primary border-opacity-75 shadow-sm' ?>">
                     <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
                         <div>
@@ -1000,11 +1005,6 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
                                 <div class="text-secondary small mb-1">
                                     Generate and assign a unique, server-controlled JOM number for this PM-approved project.
                                 </div>
-                                <?php if ($jomRequiresConfirmation): ?>
-                                    <div class="small text-warning-emphasis" style="font-size: 0.74rem;">
-                                        <strong>Format Notice:</strong> Configured pattern <code><?= e($jomFormatPattern) ?></code> (<code>config/app.php</code>) — requires business confirmation before production use.
-                                    </div>
-                                <?php endif; ?>
                             <?php endif; ?>
                         </div>
                         <div>
@@ -1026,6 +1026,12 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
                         </div>
                     </div>
                 </div>
+                <?php elseif ($hasJomDocument && !$hasAssignedJom): ?>
+                    <div class="p-2 px-3 rounded border bg-light mb-3 small text-secondary">
+                        <strong>JOM file uploaded by Project Management.</strong>
+                        Admin Finance does not need to issue another JOM number for this PM-forwarded workflow.
+                    </div>
+                <?php endif; ?>
 
                 <!-- Step 3: Forward JOM Number, SLD & Marketing BOM to Operations -->
                 <div class="p-3 rounded border <?= $isForwardedToOps ? 'bg-light border-info' : 'bg-white' ?>">
@@ -1039,11 +1045,13 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
                     <div class="list-group mb-3 small">
                         <div class="list-group-item d-flex justify-content-between align-items-center py-2">
                             <div>
-                                <strong>1. JOM Number</strong>
-                                <div class="text-secondary" style="font-size: 0.75rem;">Official Job Order Memorandum Number</div>
+                                <strong>1. <?= $hasAssignedJom ? 'JOM Number' : 'JOM File' ?></strong>
+                                <div class="text-secondary" style="font-size: 0.75rem;"><?= $hasAssignedJom ? 'Official Job Order Memorandum Number' : 'Official JOM file uploaded by Project Management' ?></div>
                             </div>
                             <?php if ($hasAssignedJom): ?>
                                 <span class="badge bg-primary font-monospace"><?= e($project['jom_number']) ?> &#10003;</span>
+                            <?php elseif ($hasJomDocument): ?>
+                                <span class="badge badge-soft-success">Uploaded by PM &#10003;</span>
                             <?php else: ?>
                                 <span class="badge badge-soft-warning">Awaiting JOM Issuance</span>
                             <?php endif; ?>
@@ -1363,7 +1371,7 @@ $isForwardedToOps = $status === 'Forwarded to Operations' || !empty($project['fo
         </div>
 
         <?php
-        $showOperationsPrPanel = $isForwardedToOps
+        $showOperationsPrPanel = ((!$isAdminFinanceUser && !$isAdmin) && $isForwardedToOps)
             || $purchaseRequest !== null
             || !empty($canPreparePr)
             || !empty($canSubmitPr)

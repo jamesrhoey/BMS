@@ -39,7 +39,7 @@ $selectedCat = (string) ($selectedCategory ?? '');
 <!-- 8 Live Database-Driven Marketing Statistics -->
 <div class="row g-3 mb-4">
     <div class="col-6 col-md-3 col-xl-3">
-        <div class="bms-stat-card border-start border-4 border-primary">
+        <div class="bms-stat-card">
             <div class="bms-stat-label">Total Projects</div>
             <div class="bms-stat-value text-dark"><?= (int) ($stats['total_marketing_projects'] ?? 0) ?></div>
             <div class="text-secondary small" style="font-size: 0.74rem;">Created Marketing records</div>
@@ -47,7 +47,7 @@ $selectedCat = (string) ($selectedCategory ?? '');
     </div>
 
     <div class="col-6 col-md-3 col-xl-3">
-        <div class="bms-stat-card border-start border-4 border-info">
+        <div class="bms-stat-card">
             <div class="bms-stat-label">MRC Projects</div>
             <div class="bms-stat-value text-info"><?= (int) ($stats['mrc_projects'] ?? 0) ?></div>
             <div class="text-secondary small" style="font-size: 0.74rem;">6 docs &bull; No PO required</div>
@@ -55,7 +55,7 @@ $selectedCat = (string) ($selectedCategory ?? '');
     </div>
 
     <div class="col-6 col-md-3 col-xl-3">
-        <div class="bms-stat-card border-start border-4 border-purple">
+        <div class="bms-stat-card">
             <div class="bms-stat-label">Special Projects</div>
             <div class="bms-stat-value" style="color: #6f42c1;"><?= (int) ($stats['special_projects'] ?? 0) ?></div>
             <div class="text-secondary small" style="font-size: 0.74rem;">7 docs &bull; Client PO required</div>
@@ -63,7 +63,7 @@ $selectedCat = (string) ($selectedCategory ?? '');
     </div>
 
     <div class="col-6 col-md-3 col-xl-3">
-        <div class="bms-stat-card border-start border-4 border-secondary">
+        <div class="bms-stat-card">
             <div class="bms-stat-label">Draft Projects</div>
             <div class="bms-stat-value text-secondary"><?= (int) ($stats['draft_projects'] ?? 0) ?></div>
             <div class="text-secondary small" style="font-size: 0.74rem;">Awaiting document preparation</div>
@@ -71,7 +71,7 @@ $selectedCat = (string) ($selectedCategory ?? '');
     </div>
 
     <div class="col-6 col-md-3 col-xl-3">
-        <div class="bms-stat-card border-start border-4 border-danger">
+        <div class="bms-stat-card">
             <div class="bms-stat-label">Returned for Correction</div>
             <div class="bms-stat-value text-danger"><?= (int) ($stats['returned_for_corrections'] ?? 0) ?></div>
             <div class="text-secondary small" style="font-size: 0.74rem;">Requires document replacement</div>
@@ -79,7 +79,7 @@ $selectedCat = (string) ($selectedCategory ?? '');
     </div>
 
     <div class="col-6 col-md-3 col-xl-3">
-        <div class="bms-stat-card border-start border-4 border-success">
+        <div class="bms-stat-card">
             <div class="bms-stat-label">Submitted Projects</div>
             <div class="bms-stat-value text-success"><?= (int) ($stats['submitted_projects'] ?? $stats['submitted_to_pm'] ?? 0) ?></div>
             <div class="text-secondary small" style="font-size: 0.74rem;">To PM &amp; Admin Finance</div>
@@ -87,7 +87,7 @@ $selectedCat = (string) ($selectedCategory ?? '');
     </div>
 
     <div class="col-6 col-md-3 col-xl-3">
-        <div class="bms-stat-card border-start border-4 border-warning">
+        <div class="bms-stat-card">
             <div class="bms-stat-label">Under Review</div>
             <div class="bms-stat-value text-warning"><?= (int) ($stats['under_review_projects'] ?? 0) ?></div>
             <div class="text-secondary small" style="font-size: 0.74rem;">PM verification in progress</div>
@@ -95,7 +95,7 @@ $selectedCat = (string) ($selectedCategory ?? '');
     </div>
 
     <div class="col-6 col-md-3 col-xl-3">
-        <div class="bms-stat-card border-start border-4 border-warning">
+        <div class="bms-stat-card">
             <div class="bms-stat-label">Missing Documents</div>
             <div class="bms-stat-value text-warning"><?= (int) ($stats['missing_documents'] ?? 0) ?></div>
             <div class="text-secondary small" style="font-size: 0.74rem;">Incomplete checklist files</div>
@@ -169,9 +169,9 @@ $selectedCat = (string) ($selectedCategory ?? '');
                             </td>
                             <td>
                                 <?php if ($isSpecial): ?>
-                                    <span class="badge" style="background-color: #6f42c1; color: #fff;">Special Project</span>
+                                    Special Project
                                 <?php else: ?>
-                                    <span class="badge bg-info text-dark">MRC</span>
+                                    MRC
                                 <?php endif; ?>
                             </td>
                             <td>

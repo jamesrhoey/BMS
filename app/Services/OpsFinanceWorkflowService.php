@@ -18,7 +18,7 @@ final class OpsFinanceWorkflowService
     /** @return array{items: list<array<string,mixed>>, total:int, page:int, per_page:int, total_pages:int} */
     public static function paginate(array $filters, int $page = 1, int $perPage = 15, bool $history = false): array
     {
-        $where = ['p.submitted_to_opfin_at IS NOT NULL'];
+        $where = ["(p.submitted_to_opfin_at IS NOT NULL OR p.status IN ('Submitted to OPS Finance', 'Received by OPS Finance', 'Under OPS Finance Processing', 'Awaiting PR', 'Awaiting Canvassing Sheets', 'OPS Finance Documents Complete', 'Submitted to Admin Finance', 'PR Submitted to OPS Finance'))"];
         $params = [];
         if (!$history) {
             $where[] = 'p.opfin_submitted_to_afin_at IS NULL';
@@ -73,7 +73,9 @@ final class OpsFinanceWorkflowService
             COALESCE(SUM(opfin_submitted_to_afin_at IS NULL AND NOT EXISTS (SELECT 1 FROM project_documents d WHERE d.project_id=projects.id AND d.document_type='CANVASSING_SHEETS' AND d.is_current=1)),0) awaiting_canvassing,
             COALESCE(SUM(opfin_submitted_to_afin_at IS NULL AND EXISTS (SELECT 1 FROM project_documents d WHERE d.project_id=projects.id AND d.document_type='PR' AND d.is_current=1) AND EXISTS (SELECT 1 FROM project_documents d WHERE d.project_id=projects.id AND d.document_type='CANVASSING_SHEETS' AND d.is_current=1)),0) complete,
             COALESCE(SUM(opfin_submitted_to_afin_at IS NOT NULL),0) submitted
-            FROM projects WHERE submitted_to_opfin_at IS NOT NULL")->fetch() ?: [];
+            FROM projects
+            WHERE submitted_to_opfin_at IS NOT NULL
+               OR status IN ('Submitted to OPS Finance', 'Received by OPS Finance', 'Under OPS Finance Processing', 'Awaiting PR', 'Awaiting Canvassing Sheets', 'OPS Finance Documents Complete', 'Submitted to Admin Finance', 'PR Submitted to OPS Finance')")->fetch() ?: [];
         return array_map('intval', ['total_received'=>$row['total_received']??0,'mrc_projects'=>$row['mrc_projects']??0,'special_projects'=>$row['special_projects']??0,'pending_processing'=>$row['pending_processing']??0,'awaiting_pr'=>$row['awaiting_pr']??0,'awaiting_canvassing'=>$row['awaiting_canvassing']??0,'complete'=>$row['complete']??0,'submitted'=>$row['submitted']??0]);
     }
 
@@ -81,7 +83,7 @@ final class OpsFinanceWorkflowService
     public static function details(int $projectId): array
     {
         $project = Project::findById($projectId);
-        if ($project === null || empty($project['submitted_to_opfin_at'])) throw new RuntimeException('Project has not been submitted by OPS to OPS Finance.');
+        if ($project === null || !Project::isSubmittedToOpsFinance($project)) throw new RuntimeException('Project has not been submitted by OPS to OPS Finance.');
         $docs = ProjectDocument::forProject($projectId);
         $project['documents'] = $docs;
         $project['history'] = ProjectWorkflowHistory::forProject($projectId);

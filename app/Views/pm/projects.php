@@ -168,9 +168,9 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
                             </td>
                             <td>
                                 <?php if ($pCat === 'special_project'): ?>
-                                    <span class="badge" style="background-color: #6f42c1; color: #fff;">Special Project</span>
+                                    Special Project
                                 <?php else: ?>
-                                    <span class="badge bg-info text-dark">MRC</span>
+                                    MRC
                                 <?php endif; ?>
                             </td>
                             <td><?= e($proj['client_name']) ?></td>
@@ -190,7 +190,7 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
                             </td>
                             <td>
                                 <?php if ($hasJom): ?>
-                                    <span class="badge bg-success small"><i class="bi bi-file-earmark-check me-1"></i>Uploaded</span>
+                                    <span class="badge badge-soft-success small text-nowrap"><i class="bi bi-file-earmark-check me-1"></i>Uploaded</span>
                                 <?php elseif ($isApproved): ?>
                                     <span class="badge bg-warning text-dark small">Pending JOM</span>
                                 <?php else: ?>

@@ -1127,7 +1127,7 @@ a:hover {
 
 .bms-stat-card {
     background: var(--bms-surface);
-    border: 1px solid var(--bms-border);
+    border: 0;
     border-top: 3px solid var(--bms-btn-primary);
     border-radius: 4px;
     padding: 0.95rem 1.15rem;
@@ -1137,7 +1137,6 @@ a:hover {
 }
 
 .bms-stat-card:hover {
-    border-color: #b8c4d2;
     border-top-color: var(--bms-navy-primary);
     box-shadow: 0 3px 8px rgba(20, 42, 69, 0.08);
 }

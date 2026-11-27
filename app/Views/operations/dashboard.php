@@ -254,9 +254,9 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
                             </td>
                             <td class="text-center">
                                 <?php if ($isSpecial): ?>
-                                    <span class="badge bg-purple text-white" style="background-color: #6f42c1;">Special Project</span>
+                                    Special Project
                                 <?php else: ?>
-                                    <span class="badge bg-info text-dark">MRC</span>
+                                    MRC
                                 <?php endif; ?>
                             </td>
                             <td class="small text-secondary">

@@ -133,9 +133,9 @@ $buildPageUrl = static function (int $targetPage) use ($filters): string {
                             </td>
                             <td>
                                 <?php if ($isSpecial): ?>
-                                    <span class="badge" style="background-color: #6f42c1; color: #fff;">Special Project</span>
+                                    Special Project
                                 <?php else: ?>
-                                    <span class="badge bg-info text-dark">MRC</span>
+                                    MRC
                                 <?php endif; ?>
                             </td>
                             <td>

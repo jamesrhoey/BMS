@@ -282,7 +282,8 @@ final class AuthorizationService
 
         if (self::isOpsFinanceUser($user)) {
             $pr = PurchaseRequest::findByProjectId((int) ($project['id'] ?? 0));
-            if ($pr !== null && !empty($pr['submitted_at'])) {
+            if (Project::isSubmittedToOpsFinance($project)
+                || ($pr !== null && !empty($pr['submitted_at']))) {
                 return true;
             }
         }
@@ -690,7 +691,36 @@ final class AuthorizationService
 
             if ($document !== null) {
                 $docType = (string) ($document['document_type'] ?? '');
-                if (!in_array($docType, ['SLD', 'BOM', PurchaseRequest::DOC_TYPE_ATTACHMENT], true)) {
+                if (!in_array($docType, [
+                    // Documents handed off by Marketing / Project Management.
+                    'JOM',
+                    'JOM — Job Order Memorandum',
+                    'SON',
+                    'SON — Service On Notice',
+                    'BOM',
+                    'BOM — Marketing Bill of Materials',
+                    'SLD',
+                    'SLD — Single Line Diagram',
+                    'PO',
+                    'Marketing PO',
+                    'Marketing PO — Purchase Order',
+                    'PO — Purchase Order',
+                    'Purchase Order',
+                    // Documents uploaded by Operations for the OPS Finance handoff.
+                    'FINAL_SLD',
+                    'Final SLD',
+                    'Final SLD — Single Line Diagram',
+                    'Final Single Line Diagram',
+                    'FINAL_BOM',
+                    'Final BOM',
+                    'Final BOM — Bill of Materials',
+                    'Final Bill of Materials',
+                    'REQUEST_OF_PR',
+                    'Request of PR',
+                    'Request of PR — Purchase Requisition Request',
+                    'Request of Purchase Requisition',
+                    PurchaseRequest::DOC_TYPE_ATTACHMENT,
+                ], true)) {
                     return false;
                 }
             }
@@ -698,15 +728,44 @@ final class AuthorizationService
 
         if (self::isOpsFinanceUser($user) && !self::isAdmin($user)) {
             $pr = PurchaseRequest::findByProjectId((int) ($project['id'] ?? 0));
-            if ($pr === null || empty($pr['submitted_at'])) {
+            if (!Project::isSubmittedToOpsFinance($project)
+                && ($pr === null || empty($pr['submitted_at']))) {
                 return false;
             }
 
             if ($document !== null) {
                 $docType = (string) ($document['document_type'] ?? '');
                 if (!in_array($docType, [
+                    // Documents handed off by Marketing / Project Management.
+                    'JOM',
+                    'JOM — Job Order Memorandum',
+                    'SON',
+                    'SON — Service On Notice',
                     'SLD',
+                    'SLD — Single Line Diagram',
                     'BOM',
+                    'BOM — Marketing Bill of Materials',
+                    'PO',
+                    'Marketing PO',
+                    'Marketing PO — Purchase Order',
+                    'PO — Purchase Order',
+                    'Purchase Order',
+                    // Documents handed off by Operations.
+                    'FINAL_SLD',
+                    'Final SLD',
+                    'Final SLD — Single Line Diagram',
+                    'Final Single Line Diagram',
+                    'FINAL_BOM',
+                    'Final BOM',
+                    'Final BOM — Bill of Materials',
+                    'Final Bill of Materials',
+                    'REQUEST_OF_PR',
+                    'Request of PR',
+                    'Request of PR — Purchase Requisition Request',
+                    'Request of Purchase Requisition',
+                    // Documents created by OPS Finance and legacy PR attachments.
+                    'PR',
+                    'CANVASSING_SHEETS',
                     PurchaseRequest::DOC_TYPE_ATTACHMENT,
                     ActualBom::DOC_TYPE_ACTUAL_BOM,
                     ActualBom::DOC_TYPE_SUPPORTING,
